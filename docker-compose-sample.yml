@@ -5,7 +5,7 @@ services:
       - MOVIES_DIR=/movies
       - TMP_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
-    image: jclipper
+    image: jermanoid/jclipper:latest
     ports:
       - "5000:5000"
     restart: unless-stopped
