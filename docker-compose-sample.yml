@@ -1,0 +1,33 @@
+services:
+  jclipper:
+    container_name: jclipper
+    environment:
+      - MOVIES_DIR=/movies
+      - TMP_DIR=/output
+      - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
+    image: jclipper
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jclipper.entrypoints=websecure
+      - traefik.http.routers.jclipper.tls.certresolver=prod
+      - traefik.http.routers.jclipper.middlewares=localonly@file
+      - traefik.http.routers.jclipper.rule=Host(`jclipper.jermanoid.com`)
+      - traefik.http.routers.jclipper.service=jclipper
+      - traefik.http.services.jclipper.loadbalancer.server.port=5000
+      - homepage.group=Downloaders
+      - homepage.name=Jclipper
+      - homepage.icon=/icons/jermanoid.png
+      - homepage.href=https://jclipper.jermanoid.com
+      - homepage.description=Create clips from movies in the movie library
+    networks:
+      - proxy
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    volumes:
+      - /mnt/mercury/video/movies/main:/movies  #Movies directory
+      - /mnt/mercury/video/movies/clips/jclipper:/output #Output directory
+      
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,48 @@
+<!-- templates/output.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo">
+            <h1 class="header-title">Clipper</h1>
+        </div>
+        <h2 class="header-subheading">Output Settings</h2>
+    </header>
+    <div style="margin-top: 60px;">
+        <form method="POST" action="/generate" id="generateForm">
+            <label for="padding">Padding (seconds):</label>
+            <input type="number" id="padding" name="padding" value="{{ padding if padding else '0' }}" min="0" max="10">
+            <br><br>
+            <label for="scale">Scale Factor:</label>
+            <input type="range" id="scale" name="scale" min="0.1" max="1.0" step="0.1" value="{{ scale if scale else '1.0' }}" oninput="updateResolution()">
+            <span id="resolution">Original: {{ original_res[0] }}x{{ original_res[1] }}</span>
+            <br><br>
+            <label for="format">Format:</label>
+            <select id="format" name="format">
+                <option value="mp4" {% if format == 'mp4' %}selected{% endif %}>MP4</option>
+                <option value="mp3" {% if format == 'mp3' %}selected{% endif %}>MP3</option>
+            </select>
+            <br><br>
+            <button type="submit" id="generateButton" class="button">Generate</button> <!-- Added button class -->
+        </form>
+        <script>
+            document.getElementById('generateButton').addEventListener('click', (e) => {
+                console.log('Button clicked, submitting form');
+                document.getElementById('generateForm').submit();
+            });
+            function updateResolution() {
+                const scale = document.getElementById('scale').value;
+                const origW = {{ original_res[0] }};
+                const origH = {{ original_res[1] }};
+                const newW = Math.round(origW * scale);
+                const newH = Math.round(origH * scale);
+                document.getElementById('resolution').textContent = `Scaled: ${newW}x${newH}`;
+            }
+        </script>
+    </div>
+</body>
+</html>

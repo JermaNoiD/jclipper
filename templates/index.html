@@ -1,0 +1,40 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="logo">
+            <h1 class="header-title">Clipper</h1>
+        </div>
+        <h2 class="header-subheading">Home</h2>
+    </header>
+    <div class="search-bar">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search movies..." onkeyup="filterMovies()">
+    </div>
+    <div class="index-content">
+        <ul class="movie-list" id="movieList">
+            {% for movie in movies %}
+                <li class="movie-list-item {% if not movie.has_srt %}no-srt{% endif %}" data-name="{{ movie.name|lower }}">
+                    <a href="{% if movie.has_srt %}{{ url_for('subtitles', name=movie.name) }}{% else %}#{% endif %}" {% if not movie.has_srt %}onclick="return false;"{% endif %}>{{ movie.name }}</a>
+                    {% if not movie.has_srt %}<span class="no-srt-text">&lt; No subtitle file available</span>{% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <script>
+        function filterMovies() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const items = document.getElementsByClassName('movie-list-item');
+            for (let i = 0; i < items.length; i++) {
+                const name = items[i].dataset.name;
+                items[i].style.display = name.includes(input) ? 'flex' : 'none';
+            }
+        }
+    </script>
+</body>
+</html>"
