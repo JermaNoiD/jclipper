@@ -1,0 +1,27 @@
+/* static/css/dark-mode-styles.css */
+
+.subtitle-item {
+  cursor: pointer;
+  padding: 5px;
+  border-bottom: 1px solid #333;
+  position: relative;
+}
+
+.subtitle-item:hover {
+  background-color: #2a2a2a;
+}
+
+.highlight {
+  background-color: #3e3e3e;
+}
+
+.start-marker {
+  color: #e0e0e0;
+  margin-left: 5px;
+}
+
+.end-marker {
+  color: #e0e0e0;
+  margin-left: 5px;
+}
+
