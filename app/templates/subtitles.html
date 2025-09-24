@@ -30,13 +30,17 @@
             -ms-overflow-style: none; /* IE and Edge */
             scrollbar-width: none; /* Firefox */
         }
+        .highlight {
+            background-color: yellow;
+            color: black;
+        }
     </style>
 </head>
 <body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
     <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
         <div class="flex items-center space-x-4">
             <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
-            <a href="#" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
+            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
         </div>
         <div class="flex items-center space-x-4">
             <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
@@ -47,7 +51,7 @@
             <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
                 <ul class="flex flex-col md:flex-row md:space-x-4">
                     <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="#" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
+                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
                 </ul>
             </div>
             <div class="flex items-center">
@@ -77,7 +81,7 @@
     <div class="container mx-auto mt-8 px-4 flex-grow">
         <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
             {% if subs %}
-            <div class="space-y-2">
+            <div class="space-y-2" id="subtitleList">
                 {% for sub in subs %}
                 <div class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700" onclick="selectSubtitle('{{ loop.index0 }}')" data-original-content="{{ sub.content }}" data-start-time="{{ sub.start_str }}">
                     <strong class="text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ sub.start_str }} --> {{ sub.end_str }}</strong>
@@ -91,6 +95,129 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/subtitles.js') }}"></script>
+    <script>
+        let startIndex = -1;
+        let endIndex = -1;
+        let currentHighlightIndex = -1;
+        const items = document.getElementsByClassName('subtitle-item');
+        const submitButton = document.getElementById('submitButton');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+
+        function handleSearchKey(event) {
+            if (event.key === 'Enter') {
+                navigateNext();
+            } else {
+                highlightSubtitles();
+                autoScrollToFirstMatch();
+            }
+        }
+
+        function highlightSubtitles() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            for (let i = 0; i < items.length; i++) {
+                const contentDiv = items[i].getElementsByClassName('subtitle-content')[0];
+                let content = items[i].dataset.originalContent.toLowerCase();
+                contentDiv.innerHTML = items[i].dataset.originalContent; // Reset to original content
+                if (searchTerm && content.includes(searchTerm)) {
+                    const regex = new RegExp(`(${searchTerm})`, 'gi');
+                    contentDiv.innerHTML = items[i].dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
+                }
+                if (i === startIndex) contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
+                if (i === endIndex) contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
+                items[i].classList.remove('disabled', 'bg-green-500', 'bg-red-400', 'bg-yellow-100', 'opacity-50', 'cursor-not-allowed');
+                items[i].style.backgroundColor = '';
+                items[i].style.pointerEvents = '';
+                items[i].style.display = 'block';
+                if (i === startIndex) items[i].classList.add('bg-green-500');
+                if (i === endIndex) items[i].classList.add('bg-red-400');
+                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100');
+                if (startIndex !== -1) {
+                    const startTime = items[startIndex].dataset.startTime;
+                    if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
+                        items[i].classList.add('opacity-50', 'cursor-not-allowed');
+                        items[i].style.pointerEvents = 'none';
+                    }
+                }
+            }
+            submitButton.disabled = !(startIndex !== -1 && endIndex !== -1 && startTimeInput && endTimeInput && startTimeInput.value && endTimeInput.value);
+        }
+
+        function selectSubtitle(index) {
+            const item = items[parseInt(index)];
+            if (!item) return;
+            const itemTime = item.dataset.startTime;
+            if (!itemTime) return;
+            if (startIndex === -1) {
+                startIndex = parseInt(index);
+                if (startTimeInput) startTimeInput.value = itemTime;
+            } else if (endIndex === -1) {
+                const startTime = items[startIndex].dataset.startTime;
+                if (compareTimes(itemTime, startTime) >= 0) {
+                    endIndex = parseInt(index);
+                    const endTime = item.getElementsByTagName('strong')[0]?.textContent.split(' --> ')[1];
+                    if (endTime && endTimeInput) endTimeInput.value = endTime;
+                } else {
+                    alert("End time cannot be earlier than start time. Please select a later timestamp.");
+                    return;
+                }
+            }
+            highlightSubtitles();
+        }
+
+        function clearSelections() {
+            startIndex = -1;
+            endIndex = -1;
+            currentHighlightIndex = -1;
+            if (startTimeInput) startTimeInput.value = '';
+            if (endTimeInput) endTimeInput.value = '';
+            submitButton.disabled = true;
+            highlightSubtitles();
+        }
+
+        function navigateNext() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (!searchTerm || items.length === 0) return;
+
+            let newIndex = (currentHighlightIndex + 1) % items.length;
+            let found = false;
+            let checkedAll = false;
+
+            while (!found && !checkedAll) {
+                const content = items[newIndex].dataset.originalContent.toLowerCase();
+                if (content.includes(searchTerm)) {
+                    found = true;
+                    currentHighlightIndex = newIndex;
+                    items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    highlightSubtitles();
+                }
+                newIndex = (newIndex + 1) % items.length;
+                if (newIndex === (currentHighlightIndex + 1) % items.length) checkedAll = true;
+            }
+        }
+
+        function autoScrollToFirstMatch() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (!searchTerm || items.length === 0) return;
+
+            for (let i = 0; i < items.length; i++) {
+                const content = items[i].dataset.originalContent.toLowerCase();
+                if (content.includes(searchTerm)) {
+                    currentHighlightIndex = i;
+                    items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    highlightSubtitles();
+                    break;
+                }
+            }
+        }
+
+        function compareTimes(time1, time2) {
+            const [h1, m1, s1] = time1.split(':').map(t => parseFloat(t.replace(',', '.')));
+            const [h2, m2, s2] = time2.split(':').map(t => parseFloat(t.replace(',', '.')));
+            const totalSeconds1 = h1 * 3600 + m1 * 60 + s1;
+            const totalSeconds2 = h2 * 3600 + m2 * 60 + s2;
+            return totalSeconds1 - totalSeconds2;
+        }
+    </script>
 </body>
 </html>
