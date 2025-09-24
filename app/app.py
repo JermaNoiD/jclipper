@@ -41,7 +41,7 @@ for m in movies:
     app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")  # Debug movie cache
 
 # Custom template filter to fix static paths
-@app.template_filter('fix_static_paths')
+""" @app.template_filter('fix_static_paths')
 def fix_static_paths(template_content):
     app.logger.info("Applying fix_static_paths filter")
     # Log original content (first 1000 chars for brevity)
@@ -86,7 +86,7 @@ def fix_static_paths(template_content):
     # Log modified content (first 1000 chars for brevity)
     app.logger.debug(f"Modified template content (truncated): {template_content[:1000]}")
     return template_content
-
+ """
 # Override render_template to apply the filter
 def render_template_patched(template_name, **context):
     app.logger.info(f"Rendering template: {template_name}")
@@ -264,6 +264,15 @@ def preview():
         return redirect(url_for('index'))
     format = output.split('.')[-1]
     return render_template('preview.html', file=output, format=format)
+
+@app.route('/history')
+def history():
+    output = session.get('output')
+    if not output:
+        app.logger.warning("No output file in session, redirecting to index")
+        return redirect(url_for('index'))
+    format = output.split('.')[-1]
+    return render_template('history.html', file=output, format=format)
 
 @app.route('/download')
 def download():
