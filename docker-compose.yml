@@ -1,29 +1,29 @@
 services:
-  jclipper:
-    container_name: jclipper
+  jclipper-test:
+    container_name: jclipper-test
     environment:
       - MOVIES_DIR=/movies
       - TMP_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
       - SECRET=fECzEd7vBZkCxTAr1uSv45kDGchkKn
-    image: jermanoid/jclipper:latest
+    image: jermanoid/jclipper:v0.1.0
     labels:
       - traefik.enable=true
-      - traefik.http.routers.jclipper.entrypoints=websecure
-      - traefik.http.routers.jclipper.tls.certresolver=prod
-      - traefik.http.routers.jclipper.middlewares=localonly@file
-      - traefik.http.routers.jclipper.rule=Host(`jclipper.jermanoid.com`)
-      - traefik.http.routers.jclipper.service=jclipper
+      - traefik.http.routers.jclipper-test.entrypoints=websecure
+      - traefik.http.routers.jclipper-test.tls.certresolver=prod
+      - traefik.http.routers.jclipper-test.middlewares=localonly@file
+      - traefik.http.routers.jclipper-test.rule=Host(`jclipper-test.jermanoid.com`)
+      - traefik.http.routers.jclipper-test.service=jclipper
       - traefik.http.services.jclipper.loadbalancer.server.port=5000
       - homepage.group=Downloaders
-      - homepage.name=Jclipper
+      - homepage.name=Jclipper-test
       - homepage.icon=/icons/jnd.png
-      - homepage.href=https://jclipper.jermanoid.com
+      - homepage.href=https://jclipper-test.jermanoid.com
       - homepage.description=Create clips from movies in the movie library
     networks:
       - proxy
-    #ports:
-    #  - "5000:5000"
+    ports:
+      - "5001:5000"
     restart: unless-stopped
     volumes:
       - /mnt/mercury/video/movies/main:/movies  #Movies directory

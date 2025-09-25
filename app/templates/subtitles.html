@@ -74,9 +74,9 @@
             </div>
             <div class="flex justify-center space-x-4 mt-4">
                 <button type="button" onclick="clearSelections()" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Clear Selections</button>
-                <form id="clipForm" action="{{ url_for('output') }}" method="POST" class="flex items-center">
-                    <input type="hidden" id="startTime" name="start">
-                    <input type="hidden" id="endTime" name="end">
+                <form id="clipForm" action="{{ url_for('output') }}" method="POST" class="flex items-center" onsubmit="return validateForm()">
+                    <input type="hidden" id="startTime" name="start" value="{{ subs[0].start_str if subs else '' }}">
+                    <input type="hidden" id="endTime" name="end" value="{{ subs[0].end_str if subs else '' }}">
                     <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="submitButton" disabled>Create Clip</button>
                 </form>
             </div>
@@ -133,9 +133,9 @@
                 items[i].style.backgroundColor = '';
                 items[i].style.pointerEvents = '';
                 items[i].style.display = 'block';
-                if (i === startIndex) items[i].classList.add('bg-green-100','dark:bg-green-900');
-                if (i === endIndex) items[i].classList.add('bg-red-100','dark:bg-red-900');
-                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100','dark:bg-yellow-700');
+                if (i === startIndex) items[i].classList.add('bg-green-100', 'dark:bg-green-900');
+                if (i === endIndex) items[i].classList.add('bg-red-100', 'dark:bg-red-900');
+                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100', 'dark:bg-yellow-700');
                 if (startIndex !== -1) {
                     const startTime = items[startIndex].dataset.startTime;
                     if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
@@ -173,10 +173,18 @@
             startIndex = -1;
             endIndex = -1;
             currentHighlightIndex = -1;
-            if (startTimeInput) startTimeInput.value = '';
-            if (endTimeInput) endTimeInput.value = '';
+            if (startTimeInput) startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
+            if (endTimeInput) endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
             submitButton.disabled = true;
             highlightSubtitles();
+        }
+
+        function validateForm() {
+            if (startIndex === -1 || endIndex === -1) {
+                alert("Please select both start and end subtitles.");
+                return false;
+            }
+            return true;
         }
 
         function navigateNext() {
@@ -222,6 +230,15 @@
             const totalSeconds2 = h2 * 3600 + m2 * 60 + s2;
             return totalSeconds1 - totalSeconds2;
         }
+
+        // Initialize with default values if subtitles exist
+        window.addEventListener('load', () => {
+            if (items.length > 0 && !startTimeInput.value && !endTimeInput.value) {
+                startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
+                endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
+            }
+            highlightSubtitles();
+        });
     </script>
 </body>
 </html>

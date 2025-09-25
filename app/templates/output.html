@@ -77,7 +77,9 @@
     </nav>
     <div class="container mx-auto mt-8 px-4 flex-grow">
         <div id="formContainer" class="bg-white rounded-lg border border-gray-300 p-6 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-            <form class="space-y-6" method="POST" action="/generate" id="generateForm" onsubmit="startPulse(); return true;">
+            <form class="space-y-6" method="POST" action="{{ url_for('generate') }}" id="generateForm" onsubmit="startPulse(); return true;">
+                <input type="hidden" name="start" value="{{ session.get('start', '') }}">
+                <input type="hidden" name="end" value="{{ session.get('end', '') }}">
                 <div>
                     <label for="padding" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Padding (seconds):</label>
                     <input type="range" id="padding" name="padding" min="0" max="60" value="{{ padding if padding else '0' }}" oninput="updatePaddingDisplay()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">

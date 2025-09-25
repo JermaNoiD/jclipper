@@ -1,26 +1,18 @@
 import os
 import uuid
 import subprocess
-import re
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify
 import srt
-from dotenv import load_dotenv
 from urllib.parse import unquote
 
-# Load environment variables
-load_dotenv()
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', str(uuid.uuid4()))  # Use environment variable or generate UUID
 
-# Get environment variables
+# Get environment variables with defaults
 MOVIES_DIR = os.getenv('MOVIES_DIR', '/movies')
 TMP_DIR = os.getenv('TMP_DIR', '/tmp/output')
 VIDEO_EXTS = os.getenv('VIDEO_EXTENSIONS', 'mp4,mkv,avi,mov,wmv,flv').split(',')
-UNIFORM_RESOLUTION = os.getenv('UNIFORM_RESOLUTION', '1280:720')
-SECRET = os.getenv('SECRET', "eyIeoi0LCVMcCJmfzrGixdIZbpOtRv")
-app = Flask(__name__, static_folder='static')
-app.secret_key = SECRET
-
-
 
 # Ensure temporary directory exists
 os.makedirs(TMP_DIR, exist_ok=True)
@@ -40,40 +32,7 @@ for dir_name in sorted(os.listdir(MOVIES_DIR)):
             srt_path = os.path.join(dir_path, srts[0]) if srts else None
             movies.append({'name': dir_name, 'video': video_path, 'srt': srt_path, 'has_srt': bool(srts)})
 for m in movies:
-    app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")  # Debug movie cache
-
-# Override render_template to apply the filter
-def render_template_patched(template_name, **context):
-    app.logger.info(f"Rendering template: {template_name}")
-    try:
-        # Load the template content
-        template_path = os.path.join(app.template_folder, template_name)
-        if not os.path.exists(template_path):
-            app.logger.error(f"Template file not found: {template_path}")
-            return f"Template {template_name} not found", 500
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
-        # Apply the fix_static_paths filter
-        template_content = fix_static_paths(template_content)
-        # Write to a temporary file for rendering
-        temp_file = os.path.join(app.template_folder, f'temp_{uuid.uuid4().hex}_{template_name}')
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(template_content)
-        try:
-            return render_template(temp_file, **context)
-        finally:
-            if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                    app.logger.debug(f"Cleaned up temporary file: {temp_file}")
-                except Exception as e:
-                    app.logger.error(f"Failed to clean up temporary file {temp_file}: {str(e)}")
-    except Exception as e:
-        app.logger.error(f"Error processing template {template_name}: {str(e)}")
-        return f"Error rendering template: {str(e)}", 500
-
-# Patch Flask's render_template
-app.jinja_env.globals['render_template'] = render_template_patched
+    app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")
 
 def timedelta_to_srt(t):
     total_seconds = int(t.total_seconds())
@@ -86,25 +45,25 @@ def timedelta_to_srt(t):
 def get_resolution(video):
     if video not in resolution_cache:
         cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', video]
-        app.logger.info(f"Running ffprobe command: {' '.join(cmd)}")  # Debug command
+        app.logger.info(f"Running ffprobe command: {' '.join(cmd)}")
         try:
             out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
-            app.logger.info(f"ffprobe raw output: {out}")  # Log raw output
+            app.logger.info(f"ffprobe raw output: {out}")
             if not out or 'x' not in out:
                 app.logger.error(f"Invalid ffprobe output for {video}: {out}")
-                resolution_cache[video] = [1920, 1080]  # Fallback to a common HD resolution
+                resolution_cache[video] = [1920, 1080]
             else:
                 width, height = map(int, out.split('x'))
                 resolution_cache[video] = [width, height]
         except subprocess.CalledProcessError as e:
             app.logger.error(f"ffprobe failed for {video}: {e.output}")
-            resolution_cache[video] = [1920, 1080]  # Fallback on failure
+            resolution_cache[video] = [1920, 1080]
         except ValueError as e:
             app.logger.error(f"Failed to parse resolution for {video}: {out} - {str(e)}")
-            resolution_cache[video] = [1920, 1080]  # Fallback on parsing error
+            resolution_cache[video] = [1920, 1080]
         except Exception as e:
             app.logger.error(f"Error getting resolution for {video}: {str(e)}")
-            resolution_cache[video] = [1920, 1080]  # Fallback on error
+            resolution_cache[video] = [1920, 1080]
     return resolution_cache[video]
 
 @app.route('/')
@@ -113,8 +72,8 @@ def index():
 
 @app.route('/subtitles/<name>')
 def subtitles(name):
-    name = unquote(name)  # Decode URL-encoded name
-    app.logger.info(f"Accessing subtitles for movie: {name}")  # Debugging
+    name = unquote(name)
+    app.logger.info(f"Accessing subtitles for movie: {name}")
     movie = next((m for m in movies if m['name'] == name), None)
     if not movie:
         app.logger.error(f"Movie not found: {name}")
@@ -123,14 +82,14 @@ def subtitles(name):
         app.logger.warning(f"No subtitles for movie: {name}")
         return 'No subtitles available', 400
     try:
-        app.logger.info(f"Attempting to open SRT file: {movie['srt']}")  # Log the exact path
+        app.logger.info(f"Attempting to open SRT file: {movie['srt']}")
         with open(movie['srt'], 'r', encoding='utf-8', errors='ignore') as f:
             subs = list(srt.parse(f))
-        # Convert timedelta to SRT-compatible strings
         for sub in subs:
             sub.start_str = timedelta_to_srt(sub.start)
             sub.end_str = timedelta_to_srt(sub.end)
         session['movie'] = movie['video']
+        app.logger.info(f"Session after setting movie: {session}")
         return render_template('subtitles.html', subs=subs, name=name)
     except FileNotFoundError as e:
         app.logger.error(f"SRT file not found at {movie['srt']}: {str(e)}")
@@ -142,31 +101,37 @@ def subtitles(name):
 @app.route('/output', methods=['GET', 'POST'])
 def output():
     if request.method == 'POST':
-        start_str = request.form['start']
-        end_str = request.form['end']
-        session['start'] = start_str
-        session['end'] = end_str
-        app.logger.info(f"Output page: Start={start_str}, End={end_str}")
+        start_str = request.form.get('start')
+        end_str = request.form.get('end')
+        if start_str and end_str:
+            session['start'] = start_str
+            session['end'] = end_str
+            app.logger.info(f"Output page: Start={start_str}, End={end_str}")
+        else:
+            app.logger.warning("Start or end not found in form data")
     start = session.get('start')
     end = session.get('end')
     video = session.get('movie')
+    app.logger.info(f"Session in output: {session}")
     if not all([start, end, video]):
-        app.logger.warning("Missing session data, redirecting to index")
+        app.logger.warning(f"Missing session data - start: {start}, end: {end}, video: {video}, redirecting to index")
         return redirect(url_for('index'))
     res = get_resolution(video)
-    app.logger.info(f"Using resolution for {video}: {res[0]}x{res[1]}")  # Debug resolution
+    app.logger.info(f"Using resolution for {video}: {res[0]}x{res[1]}")
     return render_template('output.html', original_res=res)
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    app.logger.info("Entered /generate route")  # Debug entry point
+    app.logger.info("Entered /generate route")
     padding = int(request.form.get('padding', 0))
     format = request.form.get('format', 'mp4')
     scale_factor = float(request.form.get('scale', 1.0))
     start_str = session.get('start')
     end_str = session.get('end')
-    app.logger.info(f"Selected start time: {start_str}")
-    app.logger.info(f"Selected end time: {end_str}")
+    app.logger.info(f"Session in generate: {session}")  # Debug session
+    if not start_str or not end_str:
+        app.logger.error(f"Missing start or end in session - start: {start_str}, end: {end_str}")
+        return redirect(url_for('output'))  # Redirect back to output to retry
     try:
         start_td = timedelta_from_str(start_str)
         end_td = timedelta_from_str(end_str)
@@ -180,7 +145,10 @@ def generate():
         app.logger.error(f"Error parsing timestamps: {str(e)} - Falling back to 10 seconds")
         start_sec = 0
         duration = 10.0
-    video = session['movie']
+    video = session.get('movie')  # Use get() to avoid KeyError
+    if not video:
+        app.logger.error("No movie in session")
+        return redirect(url_for('output'))  # Redirect back to output
     output_file = os.path.join(TMP_DIR, f"{uuid.uuid4()}.{format}")
     res = get_resolution(video)
     w, h = int(res[0] * scale_factor), int(res[1] * scale_factor)
@@ -196,7 +164,6 @@ def generate():
     app.logger.error(f"FFmpeg stderr: {process.stderr}")
     if process.returncode != 0:
         app.logger.error(f"FFmpeg failed with return code {process.returncode}")
-    # Verify output file
     if os.path.exists(output_file):
         probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', output_file]
         try:
@@ -220,15 +187,6 @@ def preview():
     format = output.split('.')[-1]
     return render_template('preview.html', file=output, format=format)
 
-@app.route('/history')
-def history():  # Changed function name from 'preview' to 'history'
-    output = session.get('output')
-    if not output:
-        app.logger.warning("No output file in session, redirecting to index")
-        return redirect(url_for('index'))
-    format = output.split('.')[-1]
-    return render_template('history.html', file=output, format=format)
-
 @app.route('/download')
 def download():
     output = session.get('output')
@@ -251,6 +209,9 @@ def resolution():
 
 def timedelta_from_str(time_str):
     try:
+        if time_str is None:
+            app.logger.error("time_str is None in timedelta_from_str")
+            return timedelta(seconds=0)
         time_str = time_str.split(',')[0] + '.' + time_str.split(',')[1] if ',' in time_str else time_str
         h, m, s = map(float, time_str.split(':'))
         return timedelta(hours=h, minutes=m, seconds=s)
@@ -261,17 +222,17 @@ def timedelta_from_str(time_str):
 @app.route('/serve')
 def serve():
     file = request.args.get('file')
-    app.logger.info(f"Attempting to serve file: {file}")  # Debug attempt
+    app.logger.info(f"Attempting to serve file: {file}")
     if file and os.path.exists(file):
         mime_type = 'video/mp4' if file.endswith('.mp4') else 'audio/mp3'
         app.logger.info(f"Serving file: {file} with MIME type: {mime_type}")
         try:
             response = send_file(file, mimetype=mime_type, as_attachment=False)
-            response.headers['Accept-Ranges'] = 'bytes'  # Enable byte-range requests for streaming
-            response.headers['Content-Disposition'] = 'inline'  # Ensure inline playback
-            response.headers['Access-Control-Allow-Origin'] = '*'  # Allow CORS for testing
-            response.headers['Content-Type'] = mime_type  # Explicitly set Content-Type
-            response.headers['Cache-Control'] = 'no-cache'  # Prevent caching issues
+            response.headers['Accept-Ranges'] = 'bytes'
+            response.headers['Content-Disposition'] = 'inline'
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Content-Type'] = mime_type
+            response.headers['Cache-Control'] = 'no-cache'
             return response
         except Exception as e:
             app.logger.error(f"Failed to serve file {file}: {str(e)}")
@@ -280,4 +241,4 @@ def serve():
     return 'Not found', 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)  # Enable debug mode
+    app.run(host='0.0.0.0', port=5000)  # Debug mode for development
