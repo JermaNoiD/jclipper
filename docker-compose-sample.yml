@@ -5,7 +5,7 @@ services:
       - MOVIES_DIR=/movies
       - TMP_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
-      - SECRET= #OPTIONAL a random key is generated but if you want to use a static secret then use this.
+      - SECRET_KEY= #OPTIONAL a random key is generated but if you want to use a static secret then use this.
     image: jermanoid/jclipper:latest
     ports:
       - "5000:5000"
