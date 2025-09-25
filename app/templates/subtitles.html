@@ -31,8 +31,12 @@
             scrollbar-width: none; /* Firefox */
         }
         .highlight {
-            background-color: yellow;
-            color: black;
+            background-color: #FBBF24; /* Tailwind yellow-400 as fallback */
+            color: #1F2937; /* Tailwind gray-800 for dark text */
+        }
+        .dark .highlight {
+            background-color: #F59E0B; /* Tailwind yellow-500 for dark mode */
+            color: #F9FAFB; /* Tailwind gray-50 for light text in dark mode */
         }
     </style>
 </head>
@@ -129,9 +133,9 @@
                 items[i].style.backgroundColor = '';
                 items[i].style.pointerEvents = '';
                 items[i].style.display = 'block';
-                if (i === startIndex) items[i].classList.add('bg-green-500');
-                if (i === endIndex) items[i].classList.add('bg-red-400');
-                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100');
+                if (i === startIndex) items[i].classList.add('bg-green-100','dark:bg-green-900');
+                if (i === endIndex) items[i].classList.add('bg-red-100','dark:bg-red-900');
+                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100','dark:bg-yellow-700');
                 if (startIndex !== -1) {
                     const startTime = items[startIndex].dataset.startTime;
                     if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {

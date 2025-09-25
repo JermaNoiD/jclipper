@@ -47,7 +47,7 @@
             <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
                 <ul class="flex flex-col md:flex-row md:space-x-4">
                     <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history.html" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
+                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
                 </ul>
             </div>
             <div class="flex items-center">
@@ -60,23 +60,24 @@
         </div>
     </nav>
     <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-			{% if format == 'mp4' %}
-				<video class="preview-video rounded-lg" controls>
-					<source src="{{ url_for('serve', file=file) }}" type="video/mp4">
-					Your browser does not support the video tag.
-				</video>
-			{% elif format == 'mp3' %}
-				<audio class="preview-video" controls>
-					<source src="{{ url_for('serve', file=file) }}" type="audio/mp3">
-					Your browser does not support the audio tag.
-				</audio>
-			{% endif %}
-			<br>
-			<a href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Download</a>
-			<a href="{{ url_for('output') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Modify</a>
-			<a href="{{ url_for('index') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Restart</a>
-		</div>
+        <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center">
+            {% if format == 'mp4' %}
+                <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;">
+                    <source src="{{ url_for('serve', file=file) }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            {% elif format == 'mp3' %}
+                <audio class="preview-video mx-auto" controls style="max-width: 100%;">
+                    <source src="{{ url_for('serve', file=file) }}" type="audio/mp3">
+                    Your browser does not support the audio tag.
+                </audio>
+            {% endif %}
+            <div class="mt-4 flex justify-center space-x-4">
+                <a href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Download</a>
+                <a href="{{ url_for('output') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Modify</a>
+                <a href="{{ url_for('index') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Restart</a>
+            </div>
+        </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
 </body>

@@ -11,14 +11,16 @@ from urllib.parse import unquote
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__, static_folder='static')
-app.secret_key = 'secret'
-
 # Get environment variables
 MOVIES_DIR = os.getenv('MOVIES_DIR', '/movies')
 TMP_DIR = os.getenv('TMP_DIR', '/tmp/output')
 VIDEO_EXTS = os.getenv('VIDEO_EXTENSIONS', 'mp4,mkv,avi,mov,wmv,flv').split(',')
 UNIFORM_RESOLUTION = os.getenv('UNIFORM_RESOLUTION', '1280:720')
+SECRET = os.getenv('SECRET', "eyIeoi0LCVMcCJmfzrGixdIZbpOtRv")
+app = Flask(__name__, static_folder='static')
+app.secret_key = SECRET
+
+
 
 # Ensure temporary directory exists
 os.makedirs(TMP_DIR, exist_ok=True)
@@ -40,53 +42,6 @@ for dir_name in sorted(os.listdir(MOVIES_DIR)):
 for m in movies:
     app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")  # Debug movie cache
 
-# Custom template filter to fix static paths
-""" @app.template_filter('fix_static_paths')
-def fix_static_paths(template_content):
-    app.logger.info("Applying fix_static_paths filter")
-    # Log original content (first 1000 chars for brevity)
-    app.logger.debug(f"Original template content (truncated): {template_content[:1000]}")
-    
-    # Replace href="[static|STATIC]/[bootstrap|css|CSS]/.../*.css" (case-insensitive, optional leading /)
-    template_content = re.sub(
-        r'href=["\']/?[sS][tT][aA][tT][iI][cC]/[bB][oO][oO][tT][sS][tT][rR][aA][pP]/[cC][sS][sS]/([^"\']+)\.css["\']',
-        r'href="{{ url_for(\'static\', filename=\'bootstrap/css/\1.css\') }}"',
-        template_content,
-        flags=re.IGNORECASE
-    )
-    template_content = re.sub(
-        r'href=["\']/?[sS][tT][aA][tT][iI][cC]/[cC][sS][sS]/([^"\']+)\.css["\']',
-        r'href="{{ url_for(\'static\', filename=\'css/\1.css\') }}"',
-        template_content,
-        flags=re.IGNORECASE
-    )
-    
-    # Replace src="[static|STATIC]/[bootstrap|js|JS]/.../*.js" (case-insensitive, optional leading /)
-    template_content = re.sub(
-        r'src=["\']/?[sS][tT][aA][tT][iI][cC]/[bB][oO][oO][tT][sS][tT][rR][aA][pP]/[jJ][sS]/([^"\']+)\.js["\']',
-        r'src="{{ url_for(\'static\', filename=\'bootstrap/js/\1.js\') }}"',
-        template_content,
-        flags=re.IGNORECASE
-    )
-    template_content = re.sub(
-        r'src=["\']/?[sS][tT][aA][tT][iI][cC]/[jJ][sS]/([^"\']+)\.js["\']',
-        r'src="{{ url_for(\'static\', filename=\'js/\1.js\') }}"',
-        template_content,
-        flags=re.IGNORECASE
-    )
-    
-    # Replace img src="[static|STATIC]/img/.../*" (case-insensitive, optional leading /)
-    template_content = re.sub(
-        r'src=["\']/?[sS][tT][aA][tT][iI][cC]/[iI][mM][gG]/([^"\']+)["\']',
-        r'src="{{ url_for(\'static\', filename=\'img/\1\') }}"',
-        template_content,
-        flags=re.IGNORECASE
-    )
-    
-    # Log modified content (first 1000 chars for brevity)
-    app.logger.debug(f"Modified template content (truncated): {template_content[:1000]}")
-    return template_content
- """
 # Override render_template to apply the filter
 def render_template_patched(template_name, **context):
     app.logger.info(f"Rendering template: {template_name}")
@@ -266,7 +221,7 @@ def preview():
     return render_template('preview.html', file=output, format=format)
 
 @app.route('/history')
-def history():
+def history():  # Changed function name from 'preview' to 'history'
     output = session.get('output')
     if not output:
         app.logger.warning("No output file in session, redirecting to index")
