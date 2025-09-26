@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jclipper</title>
+    <title>Jclipper - History</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -30,6 +30,11 @@
             -ms-overflow-style: none; /* IE and Edge */
             scrollbar-width: none; /* Firefox */
         }
+        /* Override any inline block styles */
+        li[style*="display: block"] {
+            display: flex !important;
+            justify-content: flex-end !important;
+        }
     </style>
 </head>
 <body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
@@ -46,8 +51,8 @@
             </button>
             <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
                 <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
+                    <li><a href="/" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
+                    <li><a href="/history" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
                 </ul>
             </div>
             <div class="flex items-center">
@@ -59,11 +64,106 @@
             </div>
         </div>
     </nav>
+    <nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-center">
+                <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search history..." onkeyup="filterHistory()">
+            </div>
+        </div>
+    </nav>
     <div class="container mx-auto mt-8 px-4 flex-grow">
         <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-            placeholder
-		</div>
+            {% if file_data %}
+                <ul class="space-y-2">
+                    {% for full_path, basename in file_data %}
+                        <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700 flex items-center w-full min-w-[250px]" style="display: flex; justify-content: flex-end;">
+                            <div class="flex-1 pr-12">
+                                <a href="{{ url_for('download', file=full_path) }}" class="text-gray-900 dark:text-gray-200">{{ basename }}</a>
+                            </div>
+                            <div class="flex">
+                                <i class="fas fa-trash text-red-500 cursor-pointer" onclick="deleteFile('{{ full_path }}')"></i>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No history available</div>
+            {% endif %}
+        </div>
+        <div class="flex justify-center mt-4">
+            <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300" onclick="clearAllClips()">Clear All Clips</button>
+        </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+    <script>
+        function filterHistory() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const items = document.querySelectorAll('ul li');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                // Avoid setting display: block unless necessary
+                item.style.display = searchTerm && !text.includes(searchTerm) ? 'none' : '';
+            });
+        }
+
+        function deleteFile(filePath) {
+            if (confirm('Are you sure you want to delete this file?')) {
+                fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'file_path=' + encodeURIComponent(filePath)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement;
+                        if (item) item.remove();
+                    } else {
+                        alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during delete fetch: ' + error);
+                    alert('An error occurred while deleting the file.');
+                });
+            }
+        }
+
+        function clearAllClips() {
+            if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
+                const files = document.querySelectorAll('ul li a');
+                const deletePromises = Array.from(files).map(file => {
+                    const urlParams = new URLSearchParams(file.getAttribute('href').split('?')[1]);
+                    const fullPath = urlParams.get('file');
+                    return fetch('/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'file_path=' + encodeURIComponent(fullPath)
+                    }).then(response => response.json());
+                });
+
+                Promise.all(deletePromises)
+                    .then(results => {
+                        const existingFiles = document.querySelectorAll('ul li').length;
+                        const failed = results.some(result => !result.success);
+                        if (!existingFiles || !failed) {
+                            location.reload(); // Refresh only if all files are gone or no failures
+                        } else {
+                            alert('Some files failed to delete.');
+                            location.reload(); // Refresh to reflect any successful deletions
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error during clear all fetch: ' + error);
+                        alert('An error occurred while clearing all clips.');
+                    });
+            }
+        }
+
+        // Initialize with no filtering
+        window.addEventListener('load', () => {
+            filterHistory();
+        });
+    </script>
 </body>
 </html>
