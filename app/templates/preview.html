@@ -108,7 +108,7 @@
             <div class="mt-4 flex justify-center space-x-4">
                 <a id="download-btn" href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>Download</a>
                 <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300">Modify</a>
-                <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel & Restart</a>
+                <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
             </div>
         </div>
     </div>
