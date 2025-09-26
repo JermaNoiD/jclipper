@@ -12,7 +12,6 @@
                 extend: {},
             },
         };
-        // Inline script to set initial theme
         (function() {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -22,13 +21,36 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        /* Hide scrollbar for cross-browser compatibility */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
         .no-scrollbar {
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .pulse-animation {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { background-color: #f3f4f6; }
+            50% { background-color: #d1d5db; }
+            100% { background-color: #f3f4f6; }
+        }
+        .dark .pulse-animation {
+            animation: pulse-dark 1.5s infinite;
+        }
+        @keyframes pulse-dark {
+            0% { background-color: #1f2937; }
+            50% { background-color: #374151; }
+            100% { background-color: #1f2937; }
+        }
+        .icon-container {
+            opacity: 0.8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
         }
     </style>
 </head>
@@ -60,25 +82,89 @@
         </div>
     </nav>
     <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center">
-            {% if format == 'mp4' %}
-                <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;">
-                    <source src="{{ url_for('serve', file=file) }}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-            {% elif format == 'mp3' %}
-                <audio class="preview-video mx-auto" controls style="max-width: 100%;">
-                    <source src="{{ url_for('serve', file=file) }}" type="audio/mp3">
-                    Your browser does not support the audio tag.
-                </audio>
-            {% endif %}
+        <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
+            <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
+                Main encoding failed. Check FFmpeg output below for details.
+            </div>
+            <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+                <source src="{{ url_for('serve', file=file) }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+            <div id="video-error" style="display: none; color: red; text-align: center;">
+                Failed to load video. Try downloading or using a different format.
+            </div>
+            <div class="mt-4 w-full flex items-center space-x-2">
+                <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
+                    Toggle FFmpeg Output
+                </button>
+                <div id="status-icon" class="icon-container bg-gray-200 dark:bg-gray-700">
+                    <i class="fas fa-sync-alt fa-spin text-blue-500 {% if main_status != 'encoding' %}hidden{% endif %}" title="Encoding in progress"></i>
+                    <i class="fas fa-check-circle text-green-500 {% if main_status != 'success' %}hidden{% endif %}" title="Encoding complete"></i>
+                </div>
+            </div>
+            <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
+            </div>
             <div class="mt-4 flex justify-center space-x-4">
-                <a href="{{ url_for('download', file=file) }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Download</a>
-                <a href="{{ url_for('output', start=start, end=end, video=video) }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Modify</a>
-                <a href="{{ url_for('index') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600">Restart</a>
+                <a id="download-btn" href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>Download</a>
+                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300">Modify</a>
+                <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel & Restart</a>
             </div>
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+    <script>
+        function updateStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    const status = data.status;
+                    const output = data.ffmpeg_output;
+                    // Update failure msg
+                    const failureDiv = document.getElementById('failure-msg');
+                    failureDiv.style.display = (status === 'failure') ? 'block' : 'none';
+                    // Update ffmpeg output
+                    const pre = document.querySelector('#ffmpeg-output pre');
+                    pre.textContent = output || 'FFmpeg output not available yet.';
+                    // Update pulse
+                    const container = document.getElementById('previewContainer');
+                    if (status === 'encoding') {
+                        container.classList.add('pulse-animation');
+                    } else {
+                        container.classList.remove('pulse-animation');
+                    }
+                    // Update download button
+                    const downloadBtn = document.getElementById('download-btn');
+                    if (status === 'success') {
+                        downloadBtn.classList.remove('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.removeAttribute('disabled');
+                    } else {
+                        downloadBtn.classList.add('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.setAttribute('disabled', 'disabled');
+                    }
+                    // Update status icon
+                    const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
+                    const successIcon = document.querySelector('#status-icon .fa-check-circle');
+                    if (status === 'encoding') {
+                        refreshIcon.classList.remove('hidden');
+                        successIcon.classList.add('hidden');
+                    } else if (status === 'success') {
+                        refreshIcon.classList.add('hidden');
+                        successIcon.classList.remove('hidden');
+                    } else {
+                        refreshIcon.classList.add('hidden');
+                        successIcon.classList.add('hidden');
+                    }
+                    // Continue polling if encoding
+                    if (status === 'encoding') {
+                        setTimeout(updateStatus, 5000);
+                    }
+                })
+                .catch(error => console.error('Status poll error:', error));
+        }
+        window.onload = function() {
+            updateStatus();
+        };
+    </script>
 </body>
 </html>

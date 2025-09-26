@@ -101,64 +101,58 @@
             const items = document.querySelectorAll('ul li');
             items.forEach(item => {
                 const text = item.textContent.toLowerCase();
-                // Avoid setting display: block unless necessary
                 item.style.display = searchTerm && !text.includes(searchTerm) ? 'none' : '';
             });
         }
-
+    
         function deleteFile(filePath) {
-            if (confirm('Are you sure you want to delete this file?')) {
-                fetch('/delete', {
+            fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'file_path=' + encodeURIComponent(filePath)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement;
+                    if (item) item.remove();
+                } else {
+                    alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error during delete fetch: ' + error);
+                alert('An error occurred while deleting the file.');
+            });
+        }
+    
+        function clearAllClips() {
+            if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
+                fetch('/clear_all', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'file_path=' + encodeURIComponent(filePath)
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement;
-                        if (item) item.remove();
+                        location.reload();
                     } else {
-                        alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+                        alert('Failed to clear all clips: ' + (data.message || 'Unknown error'));
+                        location.reload();
                     }
                 })
                 .catch(error => {
-                    console.error('Error during delete fetch: ' + error);
-                    alert('An error occurred while deleting the file.');
+                    console.error('Error during clear all fetch: ' + error);
+                    alert('An error occurred while clearing all clips.');
                 });
             }
         }
-
-        function clearAllClips() {
-            if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
-                const files = document.querySelectorAll('ul li a');
-                const deletePromises = Array.from(files).map(file => {
-                    const urlParams = new URLSearchParams(file.getAttribute('href').split('?')[1]);
-                    const fullPath = urlParams.get('file');
-                    return fetch('/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: 'file_path=' + encodeURIComponent(fullPath)
-                    }).then(response => response.json());
-                });
-
-                Promise.all(deletePromises)
-                    .then(results => {
-                        const existingFiles = document.querySelectorAll('ul li').length;
-                        const failed = results.some(result => !result.success);
-                        if (!existingFiles || !failed) {
-                            location.reload(); // Refresh only if all files are gone or no failures
-                        } else {
-                            alert('Some files failed to delete.');
-                            location.reload(); // Refresh to reflect any successful deletions
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error during clear all fetch: ' + error);
-                        alert('An error occurred while clearing all clips.');
-                    });
-            }
-        }
+    
+        // Initialize with no filtering
+        window.addEventListener('load', () => {
+            filterHistory();
+        });
+    </script>
 
         // Initialize with no filtering
         window.addEventListener('load', () => {

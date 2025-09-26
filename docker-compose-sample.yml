@@ -3,13 +3,15 @@ services:
     container_name: jclipper
     environment:
       - MOVIES_DIR=/movies
-      - TMP_DIR=/output
+      - OUTPUT_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
-      - SECRET_KEY= #OPTIONAL a random key is generated but if you want to use a static secret then use this.
+      - SECRET_KEY=secret #Set this to something random
+      - PREVIEW_RESOLUTION=1280x720 #Optional
+      - DEFAULT_LANGUAGE=en
     image: jermanoid/jclipper:latest
     ports:
       - "5000:5000"
     restart: unless-stopped
     volumes:
-      - /path/to/movies:/movies  #Movies directory
+      - /path/to/movies:/movies:ro  #Movies directory
       - /path/to/output_clips:/output #Output directory

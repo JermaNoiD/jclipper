@@ -77,6 +77,7 @@
     </nav>
     <div class="container mx-auto mt-8 px-4 flex-grow">
         <div id="formContainer" class="bg-white rounded-lg border border-gray-300 p-6 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-200">Output Settings</h2>
             <form class="space-y-6" method="POST" action="{{ url_for('generate') }}" id="generateForm" onsubmit="startPulse(); return true;">
                 <input type="hidden" name="start" value="{{ start if start else '' }}">
                 <input type="hidden" name="end" value="{{ end if end else '' }}">
@@ -88,18 +89,38 @@
                 </div>
                 <div>
                     <label for="scale" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Scale Factor: (Original: {{ original_res[0] }}x{{ original_res[1] }})</label>
-                    <input type="range" id="scale" name="scale" min="0.1" max="1.0" step="0.1" value="{{ scale if scale else '1.0' }}" oninput="updateResolution()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
+                    <input type="range" id="scale" name="scale" min="0.1" max="1.0" step="0.1" value="{{ scale_factor if scale_factor else '1.0' }}" oninput="updateResolution()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
                     <span id="resolution" class="mt-2 block text-sm text-gray-700 dark:text-gray-300 transition-colors duration-300">Scaled: {{ original_res[0] }}x{{ original_res[1] }}</span>
                 </div>
                 <div>
                     <label for="format" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Format:</label>
-                    <select id="format" name="format" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
-                        <option value="mp4" {% if format == 'mp4' %}selected{% endif %}>MP4</option>
-                        <option value="mp3" {% if format == 'mp3' %}selected{% endif %}>MP3</option>
+                    <div class="flex items-center space-x-4">
+                        <select id="format" name="format" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
+                            {% for fmt in available_formats %}
+                                <option value="{{ fmt }}" {% if fmt == default_format %}selected{% endif %}>{{ fmt.upper() }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="mt-1 text-sm text-gray-600 dark:text-gray-400">Source: {{ source_format.upper() if source_format else 'N/A' }}</span>
+                    </div>
+                </div>
+                {% if has_multiple_audio %}
+                <div>
+                    <label for="audio_index" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Audio Stream:</label>
+                    <select id="audio_index" name="audio_index" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
+                        {% for stream in audio_streams %}
+                            {% set lang = stream.get('tags', {}).get('language', 'Unknown') %}
+                            {% set codec = stream.get('codec_name', 'Unknown') %}
+                            {% set channels = stream.get('channels', 'Unknown') %}
+                            <option value="{{ loop.index0 }}" {% if loop.index0 == selected_audio_index|default(default_audio_index) %}selected{% endif %}>{{ lang|capitalize }} ({{ codec|upper }}, {{ channels }} channels)</option>
+                        {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="generateButton">Create Clip</button>
+                {% else %}
+                <input type="hidden" name="audio_index" value="{{ default_audio_index }}">
+                {% endif %}
+                <div class="flex justify-center space-x-4">
+                    <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="generateButton">Generate Clip</button>
+                    <a href="{{ url_for('subtitles', name=name) }}" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Back to Subtitles</a>
                 </div>
             </form>
         </div>
@@ -107,9 +128,9 @@
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
     <script>
         function updateResolution() {
-            const scale = document.getElementById('scale').value;
-            const origW = {{ original_res[0] }}; // Rendered by Jinja2
-            const origH = {{ original_res[1] }}; // Rendered by Jinja2
+            const scale = parseFloat(document.getElementById('scale').value) || 1.0;
+            const origW = {{ original_res[0] }};
+            const origH = {{ original_res[1] }};
             const newW = Math.round(origW * scale);
             const newH = Math.round(origH * scale);
             document.getElementById('resolution').textContent = `Scaled: ${newW}x${newH}`;
@@ -121,12 +142,11 @@
         }
 
         function startPulse() {
-            console.log('Starting pulse animation'); // Debug log
+            console.log('Starting pulse animation');
             const formContainer = document.getElementById('formContainer');
             formContainer.classList.add('pulse-animation');
         }
 
-        // Initialize displays
         window.addEventListener('load', () => {
             updatePaddingDisplay();
             updateResolution();

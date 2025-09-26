@@ -38,6 +38,12 @@
             background-color: #F59E0B; /* Tailwind yellow-500 for dark mode */
             color: #F9FAFB; /* Tailwind gray-50 for light text in dark mode */
         }
+        .bg-gradient-green-red {
+            background: linear-gradient(to right, #D1FAE5, #FECACA); /* green-100 to red-100 */
+        }
+        .dark .bg-gradient-green-red {
+            background: linear-gradient(to right, #064E3B, #7F1D1D); /* green-900 to red-900 */
+        }
     </style>
 </head>
 <body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
@@ -128,21 +134,24 @@
                     const regex = new RegExp(`(${searchTerm})`, 'gi');
                     contentDiv.innerHTML = items[i].dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
                 }
-                // Only apply background colors if selections are valid
-                items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900');
-                if (startIndex !== -1 && i === startIndex) {
-                    items[i].classList.add('bg-green-100', 'dark:bg-green-900');
-                    contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
-                }
-                if (endIndex !== -1 && i === endIndex) {
-                    items[i].classList.add('bg-red-100', 'dark:bg-red-900');
-                    contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
-                }
-                items[i].classList.remove('disabled', 'bg-yellow-100', 'opacity-50', 'cursor-not-allowed');
-                items[i].style.backgroundColor = '';
+                // Remove all background classes before applying new ones
+                items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900', 'bg-gradient-green-red', 'opacity-50', 'cursor-not-allowed');
                 items[i].style.pointerEvents = '';
                 items[i].style.display = 'block';
                 if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100', 'dark:bg-yellow-700');
+                if (startIndex !== -1 && endIndex !== -1 && startIndex === endIndex && i === startIndex) {
+                    items[i].classList.add('bg-gradient-green-red');
+                    contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start/End</span>';
+                } else {
+                    if (startIndex !== -1 && i === startIndex) {
+                        items[i].classList.add('bg-green-100', 'dark:bg-green-900');
+                        contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
+                    }
+                    if (endIndex !== -1 && i === endIndex) {
+                        items[i].classList.add('bg-red-100', 'dark:bg-red-900');
+                        contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
+                    }
+                }
                 if (startIndex !== -1) {
                     const startTime = items[startIndex].dataset.startTime;
                     if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
@@ -184,10 +193,6 @@
             if (startTimeInput) startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
             if (endTimeInput) endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
             submitButton.disabled = true;
-            // Remove all background colors before re-highlighting
-            for (let i = 0; i < items.length; i++) {
-                items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900');
-            }
             highlightSubtitles();
         }
 

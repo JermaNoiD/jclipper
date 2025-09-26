@@ -3,9 +3,11 @@ services:
     container_name: jclipper-test
     environment:
       - MOVIES_DIR=/movies
-      - TMP_DIR=/output
+      - OUTPUT_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
-      - SECRET=fECzEd7vBZkCxTAr1uSv45kDGchkKn
+      - SECRET_KEY=fECzEd7vBZkCxTAr1uSv45kDGchkKn #Required
+      - PREVIEW_RESOLUTION=1280x720 #Optional
+      - DEFAULT_LANGUAGE=en
     image: jermanoid/jclipper:v0.1.0
     labels:
       - traefik.enable=true
@@ -26,9 +28,10 @@ services:
       - "5001:5000"
     restart: unless-stopped
     volumes:
-      - /mnt/mercury/video/movies/main:/movies  #Movies directory
-      - /mnt/mercury/video/movies/clips/jclipper:/output #Output directory
-      - /mnt/mercury/software/jclipper/app:/app
+      - /mnt/mercury/video/movies/main:/movies:ro  #Movies directory
+      - /mnt/mercury/video/movies/clips/output:/output #Output directory
+      #- /mnt/mercury/video/movies/clips/temp:/tmp/jclipper #Temp directory
+      - /mnt/mercury/software/jclipper/app:/app:ro # For Testing
 networks:
   proxy:
     external: true
