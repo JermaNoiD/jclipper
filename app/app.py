@@ -532,13 +532,20 @@ def upload_s3():
         base_filename = os.path.splitext(os.path.basename(output))[0]
         parts = base_filename.split('_')
         movie_parts = []
+        time_res_parts = []
+        found_timestamp = False
         for part in parts:
             if '-' in part and part.replace('.', '').replace('-', '').isdigit():
-                break  # Stop at timestamp (e.g., "01-01-59.936")
-            movie_parts.append(part)
+                found_timestamp = True
+            if found_timestamp:
+                time_res_parts.append(part)
+            else:
+                movie_parts.append(part)
         movie_title = '_'.join(part for part in movie_parts if part).replace('(', '_').replace(')', '_').replace(' ', '_').replace(',', '_').strip('_')
+        time_res = '_'.join(time_res_parts)  # e.g., "01-01-59.936_to_01-02-15.318_1920x1080"
         movie_folder = f"{movie_title}/"
-        video_key = f"{movie_folder}video.{format}"
+        video_filename = f"video_{time_res}.{format}"  # e.g., "video_01-01-59.936_to_01-02-15.318_1920x1080.mp4"
+        video_key = f"{movie_folder}{video_filename}"
         s3.upload_file(output, S3_BUCKET, video_key, ExtraArgs={'ContentType': mime_type})
         
         # Generate video URL based on S3_LINK_FORMAT
