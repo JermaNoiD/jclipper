@@ -8,6 +8,13 @@ services:
       - SECRET_KEY=secret #Set this to something random
       - PREVIEW_RESOLUTION=1280x720 #Optional
       - DEFAULT_LANGUAGE=en
+      - S3_ENDPOINT=
+      - S3_REGION=
+      - S3_BUCKET=
+      - S3_KEY=
+      - S3_SECRET=
+      - FFMPEG_LOG_ENABLED=false
+      - STARTUP_SCAN_LOG_ENABLED=false
     image: jermanoid/jclipper:latest
     ports:
       - "5000:5000"

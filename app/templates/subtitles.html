@@ -81,9 +81,9 @@
             <div class="flex justify-center space-x-4 mt-4">
                 <button type="button" onclick="clearSelections()" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Clear Selections</button>
                 <form id="clipForm" action="{{ url_for('output') }}" method="POST" onsubmit="return validateForm()">
-                    <input type="hidden" id="startTime" name="start" value="{{ subs[0].start_str if subs else '' }}">
-                    <input type="hidden" id="endTime" name="end" value="{{ subs[0].end_str if subs else '' }}">
-                    <input type="hidden" name="video" value="{{ video if video else '' }}">
+                    <input type="hidden" id="startTime" name="start" value="">
+                    <input type="hidden" id="endTime" name="end" value="">
+                    <input type="hidden" name="video" value="{{ movie if movie else '' }}">
                     <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="submitButton" disabled>Create Clip</button>
                 </form>
             </div>

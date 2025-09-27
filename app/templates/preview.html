@@ -63,7 +63,7 @@
         <div class="flex items-center space-x-4">
             <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16M4 12h16M4 18h16"></path>
                 </svg>
             </button>
             <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
@@ -86,12 +86,23 @@
             <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
                 Main encoding failed. Check FFmpeg output below for details.
             </div>
+            {% set file_to_serve = output if main_status == 'success' else file %}
+            {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' %}
+            {% set preview_mime = 'video/mp4' if format != 'mp3' else 'audio/mpeg' %}
+            {% set is_audio = format == 'mp3' and main_status == 'success' %}
+            {% if not is_audio %}
             <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
-                <source src="{{ url_for('serve', file=file) }}" type="video/mp4">
+                <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type if main_status == 'success' else preview_mime }}">
                 Your browser does not support the video tag.
             </video>
+            {% else %}
+            <audio class="preview-video" controls style="max-width: 100%;">
+                <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
+                Your browser does not support the audio tag.
+            </audio>
+            {% endif %}
             <div id="video-error" style="display: none; color: red; text-align: center;">
-                Failed to load video. Try downloading or using a different format.
+                Failed to load media. Try downloading or using a different format.
             </div>
             <div class="mt-4 w-full flex items-center space-x-2">
                 <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
@@ -106,14 +117,32 @@
                 <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
             </div>
             <div class="mt-4 flex justify-center space-x-4">
-                <a id="download-btn" href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>Download</a>
-                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300">Modify</a>
+                <a id="download-btn" href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                    <i class="fas fa-download"></i>
+                    <span>Download</span>
+                </a>
+                <button id="copy-btn" onclick="copyToClipboard('{{ url_for('download', _external=True) }}')" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                    <i class="fas fa-clipboard"></i>
+                    <span>Copy Download Link</span>
+                </button>
+                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">
+                    <span>Modify</span>
+                </a>
                 <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
             </div>
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
     <script>
+        function copyToClipboard(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Download link copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy download link.');
+            });
+        }
+
         function updateStatus() {
             fetch('/status')
                 .then(response => response.json())
@@ -133,14 +162,27 @@
                     } else {
                         container.classList.remove('pulse-animation');
                     }
-                    // Update download button
+                    // Update download and copy buttons
                     const downloadBtn = document.getElementById('download-btn');
+                    const copyBtn = document.getElementById('copy-btn');
                     if (status === 'success') {
                         downloadBtn.classList.remove('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
                         downloadBtn.removeAttribute('disabled');
+                        copyBtn.classList.remove('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        copyBtn.removeAttribute('disabled');
+                        // Update media source
+                        const media = document.querySelector('.preview-video');
+                        if (media) {
+                            const source = media.querySelector('source');
+                            source.src = '/serve?file=' + encodeURIComponent('{{ output }}');
+                            source.type = '{{ mime_type }}';
+                            media.load();
+                        }
                     } else {
                         downloadBtn.classList.add('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
                         downloadBtn.setAttribute('disabled', 'disabled');
+                        copyBtn.classList.add('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        copyBtn.setAttribute('disabled', 'disabled');
                     }
                     // Update status icon
                     const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');

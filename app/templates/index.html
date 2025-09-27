@@ -71,7 +71,7 @@
             <ul class="movie-list space-y-2" id="movieList">
                 {% for movie in movies %}
                 <li class="movie-list-item flex items-center p-3 rounded-md hover:bg-gray-200 transition-colors duration-300 dark:hover:bg-gray-700 {% if not movie.has_srt %}cursor-not-allowed opacity-50{% endif %}" data-name="{{ movie.name|lower }}">
-                    <a href="{% if movie.has_srt %}{{ url_for('subtitles', name=movie.name) }}{% else %}#{% endif %}" {% if not movie.has_srt %}onclick="return false;"{% endif %} class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors duration-300">{{ movie.name }}</a>
+                    <a href="{% if movie.has_srt %}{{ url_for('subtitles', movie=movie.video) }}{% else %}#{% endif %}" class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors duration-300">{{ movie.name }}</a>
                     {% if not movie.has_srt %}<span class="no-srt-text text-red-900 dark:text-red-300 text-sm bg-red-200 dark:bg-red-900 px-2 py-1 rounded transition-colors duration-300">&lt; No subtitle file available</span>{% endif %}
                 </li>
                 {% endfor %}

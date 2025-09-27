@@ -104,19 +104,17 @@
                     </div>
                 </div>
                 {% if has_multiple_audio %}
-                <div>
-                    <label for="audio_index" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Audio Stream:</label>
-                    <select id="audio_index" name="audio_index" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
+                <div class="mb-4">
+                    <label class="block text-gray-700 dark:text-gray-300">Audio Stream:</label>
+                    <div class="flex flex-col space-y-2">
                         {% for stream in audio_streams %}
-                            {% set lang = stream.get('tags', {}).get('language', 'Unknown') %}
-                            {% set codec = stream.get('codec_name', 'Unknown') %}
-                            {% set channels = stream.get('channels', 'Unknown') %}
-                            <option value="{{ loop.index0 }}" {% if loop.index0 == selected_audio_index|default(default_audio_index) %}selected{% endif %}>{{ lang|capitalize }} ({{ codec|upper }}, {{ channels }} channels)</option>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="audio_index" value="{{ loop.index0 }}" {% if audio_index == loop.index0|string %}checked{% endif %}>
+                            <span>{{ stream.lang }} ({{ stream.codec }}, {{ stream.channels }} channels)</span>
+                        </label>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
-                {% else %}
-                <input type="hidden" name="audio_index" value="{{ default_audio_index }}">
                 {% endif %}
                 <div class="flex justify-center space-x-4">
                     <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="generateButton">Generate Clip</button>
