@@ -12,15 +12,25 @@ services:
     container_name: jclipper
     environment:
       - MOVIES_DIR=/movies
-      - TMP_DIR=/output
+      - OUTPUT_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
-      - SECRET= #OPTIONAL a random key is generated but if you want to use a static secret then use this.
+      - SECRET_KEY=secret #Set this to something random
+      - PREVIEW_RESOLUTION=1280x720 #Optional
+      - DEFAULT_LANGUAGE=en
+      - S3_ENDPOINT= #provide all S3 fields to enable the S3 upload button
+      - S3_REGION=
+      - S3_BUCKET=
+      - S3_KEY=
+      - S3_SECRET=
+      - S3_LINK_FORMAT= #presigned or basic. presigned is required if you are using Garage as they do not have the ability for anonymous access. But basic links are prettier
+      - FFMPEG_LOG_ENABLED=false
+      - STARTUP_SCAN_LOG_ENABLED=false
     image: jermanoid/jclipper:latest
     ports:
       - "5000:5000"
     restart: unless-stopped
     volumes:
-      - /path/to/movies:/movies  #Movies directory
+      - /path/to/movies:/movies:ro  #Movies directory
       - /path/to/output_clips:/output #Output directory
 ```
 Modify the movies volume to your movies directory

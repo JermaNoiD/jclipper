@@ -523,12 +523,36 @@ def upload_s3():
     output = session.get('output')
     if not output or not os.path.exists(output):
         return jsonify({'success': False, 'message': 'No file to upload'})
+    format = session.get('format', 'mp4')
+    mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' if format == 'mp3' else 'application/octet-stream'
+    link_format = os.getenv('S3_LINK_FORMAT', 'presigned').lower()  # Default to presigned
     try:
         s3 = boto3.client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET, region_name=S3_REGION)
-        key = os.path.basename(output)
-        s3.upload_file(output, S3_BUCKET, key)
-        url = s3.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': key}, ExpiresIn=604800)
-        return jsonify({'success': True, 'url': url})
+        # Sanitize movie title up to timestamp
+        base_filename = os.path.splitext(os.path.basename(output))[0]
+        parts = base_filename.split('_')
+        movie_parts = []
+        for part in parts:
+            if '-' in part and part.replace('.', '').replace('-', '').isdigit():
+                break  # Stop at timestamp (e.g., "01-01-59.936")
+            movie_parts.append(part)
+        movie_title = '_'.join(part for part in movie_parts if part).replace('(', '_').replace(')', '_').replace(' ', '_').replace(',', '_').strip('_')
+        movie_folder = f"{movie_title}/"
+        video_key = f"{movie_folder}video.{format}"
+        s3.upload_file(output, S3_BUCKET, video_key, ExtraArgs={'ContentType': mime_type})
+        
+        # Generate video URL based on S3_LINK_FORMAT
+        if link_format == 'basic':
+            video_url = f"{S3_ENDPOINT}/{S3_BUCKET}/{video_key}"
+        else:
+            video_url = s3.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': video_key}, ExpiresIn=604800)
+        
+        # Verify Content-Type header
+        video_response = s3.head_object(Bucket=S3_BUCKET, Key=video_key)
+        app.logger.info(f"S3 upload successful, Video URL: {video_url}, Content-Type: {video_response.get('ContentType', 'N/A')}, Link Format: {link_format}")
+        
+        # Return video URL for clipboard
+        return jsonify({'success': True, 'url': video_url})
     except Exception as e:
         app.logger.error(f"S3 upload failed: {str(e)}")
         return jsonify({'success': False, 'message': str(e)})
@@ -685,6 +709,52 @@ def serve():
             return 'Error serving file', 500
     app.logger.error(f"File not found for serving: {file}")
     return 'Not found', 404
+
+@app.route('/s3-proxy/<path:filename>')
+def s3_proxy(filename):
+    if not S3_BUCKET or not S3_ENDPOINT:
+        return 'S3 not configured', 500
+    try:
+        # Construct S3 URL
+        s3_url = f"{S3_ENDPOINT}/{S3_BUCKET}/{filename}"
+        # Fetch file from S3
+        s3 = boto3.client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET, region_name=S3_REGION)
+        response = s3.get_object(Bucket=S3_BUCKET, Key=filename)
+        content = response['Body'].read()
+        
+        # Determine MIME type
+        mime_type = (
+            'video/mp4' if filename.endswith('.mp4') else
+            'video/x-matroska' if filename.endswith('.mkv') else
+            'video/x-msvideo' if filename.endswith('.avi') else
+            'audio/mpeg' if filename.endswith('.mp3') else
+            'application/octet-stream'
+        )
+        
+        # Extract metadata from filename (e.g., "Movie_00-01-02_to_00-03-04_1920x1080.mp4")
+        parts = filename.rsplit('.', 1)[0].split('_')
+        title = parts[0].replace('_', ' ') if parts else 'Video Clip'
+        description = f"{title} - Clip from {parts[1] if len(parts) > 1 else 'movie'}" if parts else 'Video Clip'
+        
+        # Generate thumbnail URL (use FFmpeg to extract a frame if needed, or a placeholder)
+        thumbnail_url = f"{request.url_root}s3-proxy-thumbnail/{filename}"  # Optional: Add a thumbnail proxy below
+        
+        # Return with OG headers
+        return Response(
+            content,
+            mimetype=mime_type,
+            headers={
+                'og:title': title,
+                'og:description': description,
+                'og:type': 'video.other',
+                'og:video': s3_url,
+                'og:image': thumbnail_url,  # Requires a thumbnail image URL
+                'Cache-Control': 'no-cache'
+            }
+        )
+    except Exception as e:
+        app.logger.error(f"S3 proxy failed for {filename}: {str(e)}")
+        return 'Proxy error', 500
 
 if __name__ == '__main__':
     app.debug = True

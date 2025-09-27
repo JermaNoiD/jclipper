@@ -13,6 +13,7 @@ services:
       - S3_BUCKET=
       - S3_KEY=
       - S3_SECRET=
+      - S3_LINK_FORMAT= #presigned or basic. presigned is required if you are using Garage as they do not have the ability for anonymous access. But basic links are prettier
       - FFMPEG_LOG_ENABLED=false
       - STARTUP_SCAN_LOG_ENABLED=false
     image: jermanoid/jclipper:latest

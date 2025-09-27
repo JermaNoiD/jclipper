@@ -117,32 +117,43 @@
                 <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
             </div>
             <div class="mt-4 flex justify-center space-x-4">
-                <a id="download-btn" href="{{ url_for('download') }}" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
                     <i class="fas fa-download"></i>
                     <span>Download</span>
-                </a>
-                <button id="copy-btn" onclick="copyToClipboard('{{ url_for('download', _external=True) }}')" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}disabled:bg-gray-300 disabled:cursor-not-allowed dark:disabled:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                    <i class="fas fa-clipboard"></i>
-                    <span>Copy Download Link</span>
                 </button>
-                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">
-                    <span>Modify</span>
-                </a>
+                {% if s3_enabled %}
+                <button id="s3-btn" onclick="uploadToS3()" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                    <i class="fas fa-upload"></i>
+                    <span>S3 Upload</span>
+                </button>
+                {% endif %}
+                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">Modify</a>
                 <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
             </div>
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
     <script>
-        function copyToClipboard(url) {
-            navigator.clipboard.writeText(url).then(() => {
-                alert('Download link copied to clipboard!');
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-                alert('Failed to copy download link.');
-            });
+        function uploadToS3() {
+            fetch('/upload_s3')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        navigator.clipboard.writeText(data.url).then(() => {
+                            alert('Video uploaded to S3 and video link copied to clipboard! Works in Discord; may not show a preview in Facebook Messenger.');
+                        }).catch(err => {
+                            console.error('Failed to copy: ', err);
+                            alert('Video uploaded to S3 but failed to copy video link.');
+                        });
+                    } else {
+                        alert('S3 upload failed: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('S3 upload error:', error);
+                    alert('S3 upload failed.');
+                });
         }
-
         function updateStatus() {
             fetch('/status')
                 .then(response => response.json())
@@ -162,27 +173,27 @@
                     } else {
                         container.classList.remove('pulse-animation');
                     }
-                    // Update download and copy buttons
+                    // Update download button
                     const downloadBtn = document.getElementById('download-btn');
-                    const copyBtn = document.getElementById('copy-btn');
+                    const s3Btn = document.getElementById('s3-btn');
                     if (status === 'success') {
-                        downloadBtn.classList.remove('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.classList.add('bg-blue-500', 'hover:bg-blue-400');
                         downloadBtn.removeAttribute('disabled');
-                        copyBtn.classList.remove('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
-                        copyBtn.removeAttribute('disabled');
-                        // Update media source
-                        const media = document.querySelector('.preview-video');
-                        if (media) {
-                            const source = media.querySelector('source');
-                            source.src = '/serve?file=' + encodeURIComponent('{{ output }}');
-                            source.type = '{{ mime_type }}';
-                            media.load();
+                        if (s3Btn) {
+                            s3Btn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                            s3Btn.classList.add('bg-green-500', 'hover:bg-green-400');
+                            s3Btn.removeAttribute('disabled');
                         }
                     } else {
-                        downloadBtn.classList.add('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                        downloadBtn.classList.remove('bg-blue-500', 'hover:bg-blue-400');
                         downloadBtn.setAttribute('disabled', 'disabled');
-                        copyBtn.classList.add('disabled:bg-gray-300', 'disabled:cursor-not-allowed', 'dark:disabled:bg-gray-600', 'pointer-events-none');
-                        copyBtn.setAttribute('disabled', 'disabled');
+                        if (s3Btn) {
+                            s3Btn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                            s3Btn.classList.remove('bg-green-500', 'hover:bg-green-400');
+                            s3Btn.setAttribute('disabled', 'disabled');
+                        }
                     }
                     // Update status icon
                     const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
