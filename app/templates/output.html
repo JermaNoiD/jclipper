@@ -1,154 +1,82 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jclipper Output</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {},
-            },
-        };
-        // Inline script to set initial theme
-        (function() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        })();
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        /* Hide scrollbar for cross-browser compatibility */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
-        }
-        .pulse-animation {
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { background-color: #f3f4f6; } /* Tailwind gray-100 */
-            50% { background-color: #d1d5db; } /* Tailwind gray-300 */
-            100% { background-color: #f3f4f6; } /* Back to original */
-        }
-        .dark .pulse-animation {
-            animation: pulse-dark 1.5s infinite;
-        }
-        @keyframes pulse-dark {
-            0% { background-color: #1f2937; } /* Tailwind gray-800 */
-            50% { background-color: #374151; } /* Tailwind gray-700 */
-            100% { background-color: #1f2937; } /* Back to original */
-        }
-    </style>
-</head>
-<body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
-    <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
-        <div class="flex items-center space-x-4">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
-            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
-        </div>
-        <div class="flex items-center space-x-4">
-            <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
-            </button>
-            <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
-                <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
-                </ul>
+{% extends 'base.html' %}
+{% block title %}Jclipper - Preview{% endblock %}
+{% block content %}
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div id="formContainer" class="bg-white rounded-lg border border-gray-300 p-6 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+        <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-200">Output Settings</h2>
+        <form class="space-y-6" method="POST" action="{{ url_for('generate') }}" id="generateForm" onsubmit="startPulse(); return true;">
+            <input type="hidden" name="start" value="{{ start if start else '' }}">
+            <input type="hidden" name="end" value="{{ end if end else '' }}">
+            <input type="hidden" name="video" value="{{ video if video else '' }}">
+            <div>
+                <label for="padding" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Padding (seconds):</label>
+                <input type="range" id="padding" name="padding" min="0" max="60" value="{{ padding if padding else '0' }}" oninput="updatePaddingDisplay()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
+                <span id="paddingDisplay" class="mt-2 block text-sm text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ padding if padding else '0' }} seconds</span>
             </div>
-            <div class="flex items-center">
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="lightSwitch" class="sr-only peer" title="Toggle dark mode" onchange="toggleTheme()">
-                    <i class="fas fa-sun w-5 h-5 text-yellow-400 peer-checked:hidden transition-colors duration-300"></i>
-                    <i class="fas fa-moon w-5 h-5 text-gray-200 hidden peer-checked:block transition-colors duration-300"></i>
-                </label>
+            <div>
+                <label for="scale" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Scale Factor: (Original: {{ original_res[0] }}x{{ original_res[1] }})</label>
+                <input type="range" id="scale" name="scale" min="0.1" max="1.0" step="0.1" value="{{ scale_factor if scale_factor else '1.0' }}" oninput="updateResolution()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
+                <span id="resolution" class="mt-2 block text-sm text-gray-700 dark:text-gray-300 transition-colors duration-300">Scaled: {{ original_res[0] }}x{{ original_res[1] }}</span>
             </div>
-        </div>
-    </nav>
-    <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div id="formContainer" class="bg-white rounded-lg border border-gray-300 p-6 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-200">Output Settings</h2>
-            <form class="space-y-6" method="POST" action="{{ url_for('generate') }}" id="generateForm" onsubmit="startPulse(); return true;">
-                <input type="hidden" name="start" value="{{ start if start else '' }}">
-                <input type="hidden" name="end" value="{{ end if end else '' }}">
-                <input type="hidden" name="video" value="{{ video if video else '' }}">
-                <div>
-                    <label for="padding" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Padding (seconds):</label>
-                    <input type="range" id="padding" name="padding" min="0" max="60" value="{{ padding if padding else '0' }}" oninput="updatePaddingDisplay()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
-                    <span id="paddingDisplay" class="mt-2 block text-sm text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ padding if padding else '0' }} seconds</span>
-                </div>
-                <div>
-                    <label for="scale" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Scale Factor: (Original: {{ original_res[0] }}x{{ original_res[1] }})</label>
-                    <input type="range" id="scale" name="scale" min="0.1" max="1.0" step="0.1" value="{{ scale_factor if scale_factor else '1.0' }}" oninput="updateResolution()" class="mt-1 w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 transition-colors duration-300">
-                    <span id="resolution" class="mt-2 block text-sm text-gray-700 dark:text-gray-300 transition-colors duration-300">Scaled: {{ original_res[0] }}x{{ original_res[1] }}</span>
-                </div>
-                <div>
-                    <label for="format" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Format:</label>
-                    <div class="flex items-center space-x-4">
-                        <select id="format" name="format" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
-                            {% for fmt in available_formats %}
-                                <option value="{{ fmt }}" {% if fmt == default_format %}selected{% endif %}>{{ fmt.upper() }}</option>
-                            {% endfor %}
-                        </select>
-                        <span class="mt-1 text-sm text-gray-600 dark:text-gray-400">Source: {{ source_format.upper() if source_format else 'N/A' }}</span>
-                    </div>
-                </div>
-                {% if has_multiple_audio %}
-                <div class="mb-4">
-                    <label class="block text-gray-700 dark:text-gray-300">Audio Stream:</label>
-                    <div class="flex flex-col space-y-2">
-                        {% for stream in audio_streams %}
-                        <label class="flex items-center space-x-2">
-                            <input type="radio" name="audio_index" value="{{ loop.index0 }}" {% if audio_index == loop.index0|string %}checked{% endif %}>
-                            <span>{{ stream.lang }} ({{ stream.codec }}, {{ stream.channels }} channels)</span>
-                        </label>
+            <div>
+                <label for="format" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Format:</label>
+                <div class="flex items-center space-x-4">
+                    <select id="format" name="format" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white transition-colors duration-300">
+                        {% for fmt in available_formats %}
+                            <option value="{{ fmt }}" {% if fmt == default_format %}selected{% endif %}>{{ fmt.upper() }}</option>
                         {% endfor %}
-                    </div>
+                    </select>
+                    <span class="mt-1 text-sm text-gray-600 dark:text-gray-400">Source: {{ source_format.upper() if source_format else 'N/A' }}</span>
                 </div>
-                {% endif %}
-                <div class="flex justify-center space-x-4">
-                    <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="generateButton">Generate Clip</button>
-                    <a href="{{ url_for('subtitles', name=name) }}" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Back to Subtitles</a>
+            </div>
+            {% if has_multiple_audio %}
+            <div class="mb-4">
+                <label class="block text-gray-700 dark:text-gray-300">Audio Stream:</label>
+                <div class="flex flex-col space-y-2">
+                    {% for stream in audio_streams %}
+                    <label class="flex items-center space-x-2">
+                        <input type="radio" name="audio_index" value="{{ loop.index0 }}" {% if audio_index == loop.index0|string %}checked{% endif %}>
+                        <span>{{ stream.lang }} ({{ stream.codec }}, {{ stream.channels }} channels)</span>
+                    </label>
+                    {% endfor %}
                 </div>
-            </form>
-        </div>
+            </div>
+            {% endif %}
+            <div class="flex justify-center space-x-4">
+                <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="generateButton">Generate Clip</button>
+                <a href="{{ url_for('subtitles', name=name) }}" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Back to Subtitles</a>
+            </div>
+        </form>
     </div>
-    <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-    <script>
-        function updateResolution() {
-            const scale = parseFloat(document.getElementById('scale').value) || 1.0;
-            const origW = {{ original_res[0] }};
-            const origH = {{ original_res[1] }};
-            const newW = Math.round(origW * scale);
-            const newH = Math.round(origH * scale);
-            document.getElementById('resolution').textContent = `Scaled: ${newW}x${newH}`;
-        }
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script>
+    function updateResolution() {
+        const scale = parseFloat(document.getElementById('scale').value) || 1.0;
+        const origW = {{ original_res[0] }};
+        const origH = {{ original_res[1] }};
+        const newW = Math.round(origW * scale);
+        const newH = Math.round(origH * scale);
+        document.getElementById('resolution').textContent = `Scaled: ${newW}x${newH}`;
+    }
 
-        function updatePaddingDisplay() {
-            const padding = document.getElementById('padding').value;
-            document.getElementById('paddingDisplay').textContent = `${padding} seconds`;
-        }
+    function updatePaddingDisplay() {
+        const padding = document.getElementById('padding').value;
+        document.getElementById('paddingDisplay').textContent = `${padding} seconds`;
+    }
 
-        function startPulse() {
-            console.log('Starting pulse animation');
-            const formContainer = document.getElementById('formContainer');
-            formContainer.classList.add('pulse-animation');
-        }
+    function startPulse() {
+        console.log('Starting pulse animation');
+        const formContainer = document.getElementById('formContainer');
+        formContainer.classList.add('pulse-animation');
+    }
 
-        window.addEventListener('load', () => {
-            updatePaddingDisplay();
-            updateResolution();
-        });
-    </script>
-</body>
-</html>
+    window.addEventListener('load', () => {
+        updatePaddingDisplay();
+        updateResolution();
+    });
+</script>
+{% endblock %}

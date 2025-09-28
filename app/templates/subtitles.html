@@ -1,264 +1,194 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jclipper</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {},
-            },
-        };
-        // Inline script to set initial theme
-        (function() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        })();
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        /* Hide scrollbar for cross-browser compatibility */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
-        }
-        .highlight {
-            background-color: #FBBF24; /* Tailwind yellow-400 as fallback */
-            color: #1F2937; /* Tailwind gray-800 for dark text */
-        }
-        .dark .highlight {
-            background-color: #F59E0B; /* Tailwind yellow-500 for dark mode */
-            color: #F9FAFB; /* Tailwind gray-50 for light text in dark mode */
-        }
-        .bg-gradient-green-red {
-            background: linear-gradient(to right, #D1FAE5, #FECACA); /* green-100 to red-100 */
-        }
-        .dark .bg-gradient-green-red {
-            background: linear-gradient(to right, #064E3B, #7F1D1D); /* green-900 to red-900 */
-        }
-    </style>
-</head>
-<body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
-    <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
-        <div class="flex items-center space-x-4">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
-            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
+﻿{% extends 'base.html' %}
+{% block title %}Jclipper - Preview{% endblock %}
+{% block content %}
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+    <div class="container mx-auto px-4">
+        <div class="flex justify-center">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
         </div>
-        <div class="flex items-center space-x-4">
-            <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
-            </button>
-            <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
-                <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
-                </ul>
-            </div>
-            <div class="flex items-center">
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="lightSwitch" class="sr-only peer" title="Toggle dark mode" onchange="toggleTheme()">
-                    <i class="fas fa-sun w-5 h-5 text-yellow-400 peer-checked:hidden transition-colors duration-300"></i>
-                    <i class="fas fa-moon w-5 h-5 text-gray-200 hidden peer-checked:block transition-colors duration-300"></i>
-                </label>
-            </div>
-        </div>
-    </nav>
-    <nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
-        <div class="container mx-auto px-4">
-            <div class="flex justify-center">
-                <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
-            </div>
-            <div class="flex justify-center space-x-4 mt-4">
-                <button type="button" onclick="clearSelections()" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Clear Selections</button>
-                <form id="clipForm" action="{{ url_for('output') }}" method="POST" onsubmit="return validateForm()">
-                    <input type="hidden" id="startTime" name="start" value="">
-                    <input type="hidden" id="endTime" name="end" value="">
-                    <input type="hidden" name="video" value="{{ movie if movie else '' }}">
-                    <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="submitButton" disabled>Create Clip</button>
-                </form>
-            </div>
-        </div>
-    </nav>
-    <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-            {% if subs %}
-            <div class="space-y-2" id="subtitleList">
-                {% for sub in subs %}
-                <div class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700" onclick="selectSubtitle('{{ loop.index0 }}')" data-original-content="{{ sub.content }}" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}">
-                    <strong class="text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ sub.start_str }} --> {{ sub.end_str }}</strong>
-                    <div class="subtitle-content text-gray-800 dark:text-gray-200 transition-colors duration-300">{{ sub.content }}</div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No subtitle file available</div>
-            {% endif %}
+        <div class="flex justify-center space-x-4 mt-4">
+            <button type="button" onclick="clearSelections()" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Clear Selections</button>
+            <form id="clipForm" action="{{ url_for('output') }}" method="POST" onsubmit="return validateForm()">
+                <input type="hidden" id="startTime" name="start" value="">
+                <input type="hidden" id="endTime" name="end" value="">
+                <input type="hidden" name="video" value="{{ movie if movie else '' }}">
+                <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="submitButton" disabled>Create Clip</button>
+            </form>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-    <script>
-        let startIndex = -1;
-        let endIndex = -1;
-        let currentHighlightIndex = -1;
-        const items = document.getElementsByClassName('subtitle-item');
-        const submitButton = document.getElementById('submitButton');
-        const startTimeInput = document.getElementById('startTime');
-        const endTimeInput = document.getElementById('endTime');
+</nav>
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+        {% if subs %}
+        <div class="space-y-2" id="subtitleList">
+            {% for sub in subs %}
+            <div class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700" onclick="selectSubtitle('{{ loop.index0 }}')" data-original-content="{{ sub.content }}" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}">
+                <strong class="text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ sub.start_str }} --> {{ sub.end_str }}</strong>
+                <div class="subtitle-content text-gray-800 dark:text-gray-200 transition-colors duration-300">{{ sub.content }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No subtitle file available</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script>
+    let startIndex = -1;
+    let endIndex = -1;
+    let currentHighlightIndex = -1;
+    const items = document.getElementsByClassName('subtitle-item');
+    const submitButton = document.getElementById('submitButton');
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
 
-        function handleSearchKey(event) {
-            if (event.key === 'Enter') {
-                navigateNext();
+    function handleSearchKey(event) {
+        if (event.key === 'Enter') {
+            navigateNext();
+        } else {
+            highlightSubtitles();
+            autoScrollToFirstMatch();
+        }
+    }
+
+    function highlightSubtitles() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        for (let i = 0; i < items.length; i++) {
+            const contentDiv = items[i].getElementsByClassName('subtitle-content')[0];
+            let content = items[i].dataset.originalContent.toLowerCase();
+            contentDiv.innerHTML = items[i].dataset.originalContent; // Reset to original content
+            if (searchTerm && content.includes(searchTerm)) {
+                const regex = new RegExp(`(${searchTerm})`, 'gi');
+                contentDiv.innerHTML = items[i].dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
+            }
+            // Remove all background classes before applying new ones
+            items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900', 'bg-gradient-green-red', 'opacity-50', 'cursor-not-allowed');
+            items[i].style.pointerEvents = '';
+            items[i].style.display = 'block';
+            if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100', 'dark:bg-yellow-700');
+            if (startIndex !== -1 && endIndex !== -1 && startIndex === endIndex && i === startIndex) {
+                items[i].classList.add('bg-gradient-green-red');
+                contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start/End</span>';
             } else {
+                if (startIndex !== -1 && i === startIndex) {
+                    items[i].classList.add('bg-green-100', 'dark:bg-green-900');
+                    contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
+                }
+                if (endIndex !== -1 && i === endIndex) {
+                    items[i].classList.add('bg-red-100', 'dark:bg-red-900');
+                    contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
+                }
+            }
+            if (startIndex !== -1) {
+                const startTime = items[startIndex].dataset.startTime;
+                if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
+                    items[i].classList.add('opacity-50', 'cursor-not-allowed');
+                    items[i].style.pointerEvents = 'none';
+                }
+            }
+        }
+        submitButton.disabled = !(startIndex !== -1 && endIndex !== -1 && startTimeInput && endTimeInput && startTimeInput.value && endTimeInput.value);
+    }
+
+    function selectSubtitle(index) {
+        const item = items[parseInt(index)];
+        if (!item) return;
+        const startTime = item.dataset.startTime;
+        const endTime = item.dataset.endTime;
+        if (!startTime || !endTime) return;
+        if (startIndex === -1) {
+            startIndex = parseInt(index);
+            if (startTimeInput) startTimeInput.value = startTime;
+        } else if (endIndex === -1) {
+            const startTimeCheck = items[startIndex].dataset.startTime;
+            if (compareTimes(startTime, startTimeCheck) >= 0) {
+                endIndex = parseInt(index);
+                if (endTimeInput) endTimeInput.value = endTime;
+            } else {
+                alert("End time cannot be earlier than start time. Please select a later timestamp.");
+                return;
+            }
+        }
+        highlightSubtitles();
+        console.log(`Selected: start=${startTimeInput.value}, end=${endTimeInput.value}`); // Debug log
+    }
+
+    function clearSelections() {
+        startIndex = -1;
+        endIndex = -1;
+        currentHighlightIndex = -1;
+        if (startTimeInput) startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
+        if (endTimeInput) endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
+        submitButton.disabled = true;
+        highlightSubtitles();
+    }
+
+    function validateForm() {
+        if (startIndex === -1 || endIndex === -1) {
+            // Fallback to default values if no selection
+            if (items.length > 0) {
+                if (startTimeInput && !startTimeInput.value) startTimeInput.value = items[0].dataset.startTime;
+                if (endTimeInput && !endTimeInput.value) endTimeInput.value = items[0].dataset.endTime;
+            }
+        }
+        return true; // Allow submission with defaults or selected values
+    }
+
+    function navigateNext() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        if (!searchTerm || items.length === 0) return;
+
+        let newIndex = (currentHighlightIndex + 1) % items.length;
+        let found = false;
+        let checkedAll = false;
+
+        while (!found && !checkedAll) {
+            const content = items[newIndex].dataset.originalContent.toLowerCase();
+            if (content.includes(searchTerm)) {
+                found = true;
+                currentHighlightIndex = newIndex;
+                items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
                 highlightSubtitles();
-                autoScrollToFirstMatch();
+            }
+            newIndex = (newIndex + 1) % items.length;
+            if (newIndex === (currentHighlightIndex + 1) % items.length) checkedAll = true;
+        }
+    }
+
+    function autoScrollToFirstMatch() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        if (!searchTerm || items.length === 0) return;
+
+        for (let i = 0; i < items.length; i++) {
+            const content = items[i].dataset.originalContent.toLowerCase();
+            if (content.includes(searchTerm)) {
+                currentHighlightIndex = i;
+                items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlightSubtitles();
+                break;
             }
         }
+    }
 
-        function highlightSubtitles() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            for (let i = 0; i < items.length; i++) {
-                const contentDiv = items[i].getElementsByClassName('subtitle-content')[0];
-                let content = items[i].dataset.originalContent.toLowerCase();
-                contentDiv.innerHTML = items[i].dataset.originalContent; // Reset to original content
-                if (searchTerm && content.includes(searchTerm)) {
-                    const regex = new RegExp(`(${searchTerm})`, 'gi');
-                    contentDiv.innerHTML = items[i].dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
-                }
-                // Remove all background classes before applying new ones
-                items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900', 'bg-gradient-green-red', 'opacity-50', 'cursor-not-allowed');
-                items[i].style.pointerEvents = '';
-                items[i].style.display = 'block';
-                if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100', 'dark:bg-yellow-700');
-                if (startIndex !== -1 && endIndex !== -1 && startIndex === endIndex && i === startIndex) {
-                    items[i].classList.add('bg-gradient-green-red');
-                    contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start/End</span>';
-                } else {
-                    if (startIndex !== -1 && i === startIndex) {
-                        items[i].classList.add('bg-green-100', 'dark:bg-green-900');
-                        contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
-                    }
-                    if (endIndex !== -1 && i === endIndex) {
-                        items[i].classList.add('bg-red-100', 'dark:bg-red-900');
-                        contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
-                    }
-                }
-                if (startIndex !== -1) {
-                    const startTime = items[startIndex].dataset.startTime;
-                    if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
-                        items[i].classList.add('opacity-50', 'cursor-not-allowed');
-                        items[i].style.pointerEvents = 'none';
-                    }
-                }
-            }
-            submitButton.disabled = !(startIndex !== -1 && endIndex !== -1 && startTimeInput && endTimeInput && startTimeInput.value && endTimeInput.value);
+    function compareTimes(time1, time2) {
+        const [h1, m1, s1] = time1.split(':').map(t => parseFloat(t.replace(',', '.')));
+        const [h2, m2, s2] = time2.split(':').map(t => parseFloat(t.replace(',', '.')));
+        const totalSeconds1 = h1 * 3600 + m1 * 60 + s1;
+        const totalSeconds2 = h2 * 3600 + m2 * 60 + s2;
+        return totalSeconds1 - totalSeconds2;
+    }
+
+    // Initialize with default values if subtitles exist
+    window.addEventListener('load', () => {
+        if (items.length > 0 && !startTimeInput.value && !endTimeInput.value) {
+            startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
+            endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
         }
-
-        function selectSubtitle(index) {
-            const item = items[parseInt(index)];
-            if (!item) return;
-            const startTime = item.dataset.startTime;
-            const endTime = item.dataset.endTime;
-            if (!startTime || !endTime) return;
-            if (startIndex === -1) {
-                startIndex = parseInt(index);
-                if (startTimeInput) startTimeInput.value = startTime;
-            } else if (endIndex === -1) {
-                const startTimeCheck = items[startIndex].dataset.startTime;
-                if (compareTimes(startTime, startTimeCheck) >= 0) {
-                    endIndex = parseInt(index);
-                    if (endTimeInput) endTimeInput.value = endTime;
-                } else {
-                    alert("End time cannot be earlier than start time. Please select a later timestamp.");
-                    return;
-                }
-            }
-            highlightSubtitles();
-            console.log(`Selected: start=${startTimeInput.value}, end=${endTimeInput.value}`); // Debug log
-        }
-
-        function clearSelections() {
-            startIndex = -1;
-            endIndex = -1;
-            currentHighlightIndex = -1;
-            if (startTimeInput) startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
-            if (endTimeInput) endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
-            submitButton.disabled = true;
-            highlightSubtitles();
-        }
-
-        function validateForm() {
-            if (startIndex === -1 || endIndex === -1) {
-                // Fallback to default values if no selection
-                if (items.length > 0) {
-                    if (startTimeInput && !startTimeInput.value) startTimeInput.value = items[0].dataset.startTime;
-                    if (endTimeInput && !endTimeInput.value) endTimeInput.value = items[0].dataset.endTime;
-                }
-            }
-            return true; // Allow submission with defaults or selected values
-        }
-
-        function navigateNext() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            if (!searchTerm || items.length === 0) return;
-
-            let newIndex = (currentHighlightIndex + 1) % items.length;
-            let found = false;
-            let checkedAll = false;
-
-            while (!found && !checkedAll) {
-                const content = items[newIndex].dataset.originalContent.toLowerCase();
-                if (content.includes(searchTerm)) {
-                    found = true;
-                    currentHighlightIndex = newIndex;
-                    items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    highlightSubtitles();
-                }
-                newIndex = (newIndex + 1) % items.length;
-                if (newIndex === (currentHighlightIndex + 1) % items.length) checkedAll = true;
-            }
-        }
-
-        function autoScrollToFirstMatch() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            if (!searchTerm || items.length === 0) return;
-
-            for (let i = 0; i < items.length; i++) {
-                const content = items[i].dataset.originalContent.toLowerCase();
-                if (content.includes(searchTerm)) {
-                    currentHighlightIndex = i;
-                    items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    highlightSubtitles();
-                    break;
-                }
-            }
-        }
-
-        function compareTimes(time1, time2) {
-            const [h1, m1, s1] = time1.split(':').map(t => parseFloat(t.replace(',', '.')));
-            const [h2, m2, s2] = time2.split(':').map(t => parseFloat(t.replace(',', '.')));
-            const totalSeconds1 = h1 * 3600 + m1 * 60 + s1;
-            const totalSeconds2 = h2 * 3600 + m2 * 60 + s2;
-            return totalSeconds1 - totalSeconds2;
-        }
-
-        // Initialize with default values if subtitles exist
-        window.addEventListener('load', () => {
-            if (items.length > 0 && !startTimeInput.value && !endTimeInput.value) {
-                startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
-                endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
-            }
-            highlightSubtitles();
-        });
-    </script>
-</body>
-</html>
+        highlightSubtitles();
+    });
+</script>
+{% endblock %}

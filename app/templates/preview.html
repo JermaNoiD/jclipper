@@ -1,223 +1,145 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jclipper</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {},
-            },
-        };
-        (function() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        })();
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .pulse-animation {
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { background-color: #f3f4f6; }
-            50% { background-color: #d1d5db; }
-            100% { background-color: #f3f4f6; }
-        }
-        .dark .pulse-animation {
-            animation: pulse-dark 1.5s infinite;
-        }
-        @keyframes pulse-dark {
-            0% { background-color: #1f2937; }
-            50% { background-color: #374151; }
-            100% { background-color: #1f2937; }
-        }
-        .icon-container {
-            opacity: 0.8;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem;
-            border-radius: 0.375rem;
-        }
-    </style>
-</head>
-<body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
-    <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
-        <div class="flex items-center space-x-4">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
-            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
+{% extends 'base.html' %}
+{% block title %}Jclipper - Preview{% endblock %}
+{% block content %}
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
+        <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
+            Main encoding failed. Check FFmpeg output below for details.
         </div>
-        <div class="flex items-center space-x-4">
-            <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16M4 12h16M4 18h16"></path>
-                </svg>
+        {% set file_to_serve = output if main_status == 'success' else file %}
+        {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' %}
+        {% set preview_mime = 'video/mp4' if format != 'mp3' else 'audio/mpeg' %}
+        {% set is_audio = format == 'mp3' and main_status == 'success' %}
+        {% if not is_audio %}
+        <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type if main_status == 'success' else preview_mime }}">
+            Your browser does not support the video tag.
+        </video>
+        {% else %}
+        <audio class="preview-video" controls style="max-width: 100%;">
+            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
+            Your browser does not support the audio tag.
+        </audio>
+        {% endif %}
+        <div id="video-error" style="display: none; color: red; text-align: center;">
+            Failed to load media. Try downloading or using a different format.
+        </div>
+        <div class="mt-4 w-full flex items-center space-x-2">
+            <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
+                Toggle FFmpeg Output
             </button>
-            <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
-                <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
-                </ul>
-            </div>
-            <div class="flex items-center">
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="lightSwitch" class="sr-only peer" title="Toggle dark mode" onchange="toggleTheme()">
-                    <i class="fas fa-sun w-5 h-5 text-yellow-400 peer-checked:hidden transition-colors duration-300"></i>
-                    <i class="fas fa-moon w-5 h-5 text-gray-200 hidden peer-checked:block transition-colors duration-300"></i>
-                </label>
+            <div id="status-icon" class="icon-container bg-gray-200 dark:bg-gray-700">
+                <i class="fas fa-sync-alt fa-spin text-blue-500 {% if main_status != 'encoding' %}hidden{% endif %}" title="Encoding in progress"></i>
+                <i class="fas fa-check-circle text-green-500 {% if main_status != 'success' %}hidden{% endif %}" title="Encoding complete"></i>
             </div>
         </div>
-    </nav>
-    <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
-            <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
-                Main encoding failed. Check FFmpeg output below for details.
-            </div>
-            {% set file_to_serve = output if main_status == 'success' else file %}
-            {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' %}
-            {% set preview_mime = 'video/mp4' if format != 'mp3' else 'audio/mpeg' %}
-            {% set is_audio = format == 'mp3' and main_status == 'success' %}
-            {% if not is_audio %}
-            <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
-                <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type if main_status == 'success' else preview_mime }}">
-                Your browser does not support the video tag.
-            </video>
-            {% else %}
-            <audio class="preview-video" controls style="max-width: 100%;">
-                <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
-                Your browser does not support the audio tag.
-            </audio>
+        <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+            <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
+        </div>
+        <div class="mt-4 flex justify-center space-x-4">
+            <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                <i class="fas fa-download"></i>
+                <span>Download</span>
+            </button>
+            {% if s3_enabled %}
+            <button id="s3-btn" onclick="uploadToS3()" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                <i class="fas fa-upload"></i>
+                <span>S3 Upload</span>
+            </button>
             {% endif %}
-            <div id="video-error" style="display: none; color: red; text-align: center;">
-                Failed to load media. Try downloading or using a different format.
-            </div>
-            <div class="mt-4 w-full flex items-center space-x-2">
-                <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
-                    Toggle FFmpeg Output
-                </button>
-                <div id="status-icon" class="icon-container bg-gray-200 dark:bg-gray-700">
-                    <i class="fas fa-sync-alt fa-spin text-blue-500 {% if main_status != 'encoding' %}hidden{% endif %}" title="Encoding in progress"></i>
-                    <i class="fas fa-check-circle text-green-500 {% if main_status != 'success' %}hidden{% endif %}" title="Encoding complete"></i>
-                </div>
-            </div>
-            <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
-            </div>
-            <div class="mt-4 flex justify-center space-x-4">
-                <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                    <i class="fas fa-download"></i>
-                    <span>Download</span>
-                </button>
-                {% if s3_enabled %}
-                <button id="s3-btn" onclick="uploadToS3()" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                    <i class="fas fa-upload"></i>
-                    <span>S3 Upload</span>
-                </button>
-                {% endif %}
-                <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">Modify</a>
-                <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
-            </div>
+            <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">Modify</a>
+            <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-    <script>
-        function uploadToS3() {
-            fetch('/upload_s3')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        navigator.clipboard.writeText(data.url).then(() => {
-                            alert('Video uploaded to S3 and video link copied to clipboard! Works in Discord; may not show a preview in Facebook Messenger.');
-                        }).catch(err => {
-                            console.error('Failed to copy: ', err);
-                            alert('Video uploaded to S3 but failed to copy video link.');
-                        });
-                    } else {
-                        alert('S3 upload failed: ' + data.message);
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script>
+    function uploadToS3() {
+        fetch('/upload_s3')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    navigator.clipboard.writeText(data.url).then(() => {
+                        alert('Video uploaded to S3 and video link copied to clipboard! Works in Discord; may not show a preview in Facebook Messenger.');
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        alert('Video uploaded to S3 but failed to copy video link.');
+                    });
+                } else {
+                    alert('S3 upload failed: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('S3 upload error:', error);
+                alert('S3 upload failed.');
+            });
+    }
+    function updateStatus() {
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                const status = data.status;
+                const output = data.ffmpeg_output;
+                // Update failure msg
+                const failureDiv = document.getElementById('failure-msg');
+                failureDiv.style.display = (status === 'failure') ? 'block' : 'none';
+                // Update ffmpeg output
+                const pre = document.querySelector('#ffmpeg-output pre');
+                pre.textContent = output || 'FFmpeg output not available yet.';
+                // Update pulse
+                const container = document.getElementById('previewContainer');
+                if (status === 'encoding') {
+                    container.classList.add('pulse-animation');
+                } else {
+                    container.classList.remove('pulse-animation');
+                }
+                // Update download button
+                const downloadBtn = document.getElementById('download-btn');
+                const s3Btn = document.getElementById('s3-btn');
+                if (status === 'success') {
+                    downloadBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                    downloadBtn.classList.add('bg-blue-500', 'hover:bg-blue-400');
+                    downloadBtn.removeAttribute('disabled');
+                    if (s3Btn) {
+                        s3Btn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                        s3Btn.classList.add('bg-green-500', 'hover:bg-green-400');
+                        s3Btn.removeAttribute('disabled');
                     }
-                })
-                .catch(error => {
-                    console.error('S3 upload error:', error);
-                    alert('S3 upload failed.');
-                });
-        }
-        function updateStatus() {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    const status = data.status;
-                    const output = data.ffmpeg_output;
-                    // Update failure msg
-                    const failureDiv = document.getElementById('failure-msg');
-                    failureDiv.style.display = (status === 'failure') ? 'block' : 'none';
-                    // Update ffmpeg output
-                    const pre = document.querySelector('#ffmpeg-output pre');
-                    pre.textContent = output || 'FFmpeg output not available yet.';
-                    // Update pulse
-                    const container = document.getElementById('previewContainer');
-                    if (status === 'encoding') {
-                        container.classList.add('pulse-animation');
-                    } else {
-                        container.classList.remove('pulse-animation');
+                } else {
+                    downloadBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                    downloadBtn.classList.remove('bg-blue-500', 'hover:bg-blue-400');
+                    downloadBtn.setAttribute('disabled', 'disabled');
+                    if (s3Btn) {
+                        s3Btn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                        s3Btn.classList.remove('bg-green-500', 'hover:bg-green-400');
+                        s3Btn.setAttribute('disabled', 'disabled');
                     }
-                    // Update download button
-                    const downloadBtn = document.getElementById('download-btn');
-                    const s3Btn = document.getElementById('s3-btn');
-                    if (status === 'success') {
-                        downloadBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                        downloadBtn.classList.add('bg-blue-500', 'hover:bg-blue-400');
-                        downloadBtn.removeAttribute('disabled');
-                        if (s3Btn) {
-                            s3Btn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                            s3Btn.classList.add('bg-green-500', 'hover:bg-green-400');
-                            s3Btn.removeAttribute('disabled');
-                        }
-                    } else {
-                        downloadBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                        downloadBtn.classList.remove('bg-blue-500', 'hover:bg-blue-400');
-                        downloadBtn.setAttribute('disabled', 'disabled');
-                        if (s3Btn) {
-                            s3Btn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                            s3Btn.classList.remove('bg-green-500', 'hover:bg-green-400');
-                            s3Btn.setAttribute('disabled', 'disabled');
-                        }
-                    }
-                    // Update status icon
-                    const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
-                    const successIcon = document.querySelector('#status-icon .fa-check-circle');
-                    if (status === 'encoding') {
-                        refreshIcon.classList.remove('hidden');
-                        successIcon.classList.add('hidden');
-                    } else if (status === 'success') {
-                        refreshIcon.classList.add('hidden');
-                        successIcon.classList.remove('hidden');
-                    } else {
-                        refreshIcon.classList.add('hidden');
-                        successIcon.classList.add('hidden');
-                    }
-                    // Continue polling if encoding
-                    if (status === 'encoding') {
-                        setTimeout(updateStatus, 5000);
-                    }
-                })
-                .catch(error => console.error('Status poll error:', error));
-        }
-        window.onload = function() {
-            updateStatus();
-        };
-    </script>
-</body>
-</html>
+                }
+                // Update status icon
+                const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
+                const successIcon = document.querySelector('#status-icon .fa-check-circle');
+                if (status === 'encoding') {
+                    refreshIcon.classList.remove('hidden');
+                    successIcon.classList.add('hidden');
+                } else if (status === 'success') {
+                    refreshIcon.classList.add('hidden');
+                    successIcon.classList.remove('hidden');
+                } else {
+                    refreshIcon.classList.add('hidden');
+                    successIcon.classList.add('hidden');
+                }
+                // Continue polling if encoding
+                if (status === 'encoding') {
+                    setTimeout(updateStatus, 5000);
+                }
+            })
+            .catch(error => console.error('Status poll error:', error));
+    }
+    window.onload = function() {
+        updateStatus();
+    };
+</script>
+{% endblock %}

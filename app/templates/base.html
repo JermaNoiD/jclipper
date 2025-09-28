@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Jclipper{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: {} },
+        };
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pulse-animation { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { background-color: #f3f4f6; } 50% { background-color: #d1d5db; } 100% { background-color: #f3f4f6; } }
+        .dark .pulse-animation { animation: pulse-dark 1.5s infinite; }
+        @keyframes pulse-dark { 0% { background-color: #1f2937; } 50% { background-color: #374151; } 100% { background-color: #1f2937; } }
+        .icon-container { opacity: 0.8; display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem; border-radius: 0.375rem; }
+        .highlight {
+            background-color: #FBBF24; /* Tailwind yellow-400 as fallback */
+            color: #1F2937; /* Tailwind gray-800 for dark text */
+        }
+        .dark .highlight {
+            background-color: #F59E0B; /* Tailwind yellow-500 for dark mode */
+            color: #F9FAFB; /* Tailwind gray-50 for light text in dark mode */
+        }
+        .bg-gradient-green-red {
+            background: linear-gradient(to right, #D1FAE5, #FECACA); /* green-100 to red-100 */
+        }
+        .dark .bg-gradient-green-red {
+            background: linear-gradient(to right, #064E3B, #7F1D1D); /* green-900 to red-900 */
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
+    {% block nav %}
+    <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
+        <div class="flex items-center space-x-4">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
+            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+            <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
+                <ul class="flex flex-col md:flex-row md:space-x-4">
+                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
+                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
+                </ul>
+            </div>
+            <div class="flex items-center">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="lightSwitch" class="sr-only peer" title="Toggle dark mode" onchange="toggleTheme()">
+                    <i class="fas fa-sun w-5 h-5 text-yellow-400 peer-checked:hidden transition-colors duration-300"></i>
+                    <i class="fas fa-moon w-5 h-5 text-gray-200 hidden peer-checked:block transition-colors duration-300"></i>
+                </label>
+            </div>
+        </div>
+    </nav>
+    {% endblock %}
+    {% block content %}{% endblock %}
+    {% block scripts %}
+    <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+    {% endblock %}
+</body>
+</html>
