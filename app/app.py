@@ -159,21 +159,19 @@ def get_resolution(video):
 @app.before_request
 def make_session_permanent():
     session.permanent = True
-    if not request.cookies.get('session'):
-        app.logger.info(f"New session detected, clearing TEMP_DIR: {TEMP_DIR}")
-        for item in os.listdir(TEMP_DIR):
-            item_path = os.path.join(TEMP_DIR, item)
-            try:
-                if os.path.isdir(item_path):
-                    shutil.rmtree(item_path)
-                else:
-                    os.remove(item_path)
-                app.logger.info(f"Removed {item} from TEMP_DIR on new session")
-            except Exception as e:
-                app.logger.error(f"Failed to clear {item} from TEMP_DIR: {str(e)}")
-        session['job_dirs'] = {}
-        session.modified = True
-    app.logger.debug(f"Session state: {session}")
+    # Remove the following block to prevent spurious clears:
+    # if not request.cookies.get('session'):
+    #     app.logger.info(f"New session detected, clearing TEMP_DIR: {TEMP_DIR}")
+    #     for item in os.listdir(TEMP_DIR):
+    #         item_path = os.path.join(TEMP_DIR, item)
+    #         try:
+    #             if os.path.isdir(item_path):
+    #                 shutil.rmtree(item_path)
+    #             else:
+    #                 os.remove(item_path)
+    #             app.logger.info(f"Removed {item} from TEMP_DIR on new session")
+    #         except Exception as e:
+    #             app.logger.error(f"Failed to remove {item} from TEMP_DIR: {str(e)}")
 
 @app.route('/', methods=['GET'])
 def index():
