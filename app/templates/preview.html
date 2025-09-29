@@ -24,6 +24,7 @@
         <div id="video-error" style="display: none; color: red; text-align: center;">
             Failed to load media. Try downloading or using a different format.
         </div>
+        {% if not from_history %}
         <div class="mt-4 w-full flex items-center space-x-2">
             <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
                 Toggle FFmpeg Output
@@ -36,19 +37,27 @@
         <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
             <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
         </div>
+        {% endif %}
         <div class="mt-4 flex justify-center space-x-4">
             <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
                 <i class="fas fa-download"></i>
                 <span>Download</span>
             </button>
             {% if s3_enabled %}
-            <button id="s3-btn" onclick="uploadToS3()" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                <i class="fas fa-upload"></i>
-                <span>S3 Upload</span>
+            <button id="share-btn" onclick="shareVideo()" class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
+                <i class="fas fa-share-alt"></i>
+                <span>Share</span>
+            </button>
+            {% else %}
+            <button id="share-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" disabled title="Sharing is disabled because S3 is not configured">
+                <i class="fas fa-share-alt"></i>
+                <span>Share</span>
             </button>
             {% endif %}
+            {% if not from_history %}
             <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">Modify</a>
             <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -77,7 +86,56 @@
                 alert('S3 upload failed.');
             });
     }
+
+    function shareVideo() {
+        const title = "{{ movie_name | default('Video Clip') }}";
+        const text = "Check out this video clip from Jclipper!";
+        {% if s3_enabled %}
+        fetch('/upload_s3{% if from_history %}?file={{ output | urlencode }}{% endif %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (navigator.share) {
+                        navigator.share({
+                            title: title,
+                            text: text,
+                            url: data.url
+                        }).then(() => {
+                            console.log('Shared successfully');
+                        }).catch(err => {
+                            console.error('Share failed:', err);
+                            // Fallback to clipboard
+                            navigator.clipboard.writeText(data.url).then(() => {
+                                alert('Share not supported. Video link copied to clipboard!');
+                            }).catch(err => {
+                                console.error('Failed to copy:', err);
+                                alert('Share not supported and failed to copy video link.');
+                            });
+                        });
+                    } else {
+                        // Fallback for non-supported browsers
+                        navigator.clipboard.writeText(data.url).then(() => {
+                            alert('Share not supported. Video link copied to clipboard!');
+                        }).catch(err => {
+                            console.error('Failed to copy:', err);
+                            alert('Share not supported and failed to copy video link.');
+                        });
+                    }
+                } else {
+                    alert('S3 upload failed: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('S3 upload error:', error);
+                alert('S3 upload failed.');
+            });
+        {% else %}
+        alert('Sharing is not available because S3 is not configured.');
+        {% endif %}
+    }
+
     function updateStatus() {
+        {% if not from_history %}
         fetch('/status')
             .then(response => response.json())
             .then(data => {
@@ -96,27 +154,23 @@
                 } else {
                     container.classList.remove('pulse-animation');
                 }
-                // Update download button
+                // Update buttons
                 const downloadBtn = document.getElementById('download-btn');
-                const s3Btn = document.getElementById('s3-btn');
+                const shareBtn = document.getElementById('share-btn');
                 if (status === 'success') {
                     downloadBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
                     downloadBtn.classList.add('bg-blue-500', 'hover:bg-blue-400');
                     downloadBtn.removeAttribute('disabled');
-                    if (s3Btn) {
-                        s3Btn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                        s3Btn.classList.add('bg-green-500', 'hover:bg-green-400');
-                        s3Btn.removeAttribute('disabled');
-                    }
+                    shareBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                    shareBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-400');
+                    shareBtn.removeAttribute('disabled');
                 } else {
                     downloadBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
                     downloadBtn.classList.remove('bg-blue-500', 'hover:bg-blue-400');
                     downloadBtn.setAttribute('disabled', 'disabled');
-                    if (s3Btn) {
-                        s3Btn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                        s3Btn.classList.remove('bg-green-500', 'hover:bg-green-400');
-                        s3Btn.setAttribute('disabled', 'disabled');
-                    }
+                    shareBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
+                    shareBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-400');
+                    shareBtn.setAttribute('disabled', 'disabled');
                 }
                 // Update status icon
                 const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
@@ -137,6 +191,7 @@
                 }
             })
             .catch(error => console.error('Status poll error:', error));
+        {% endif %}
     }
     window.onload = function() {
         updateStatus();

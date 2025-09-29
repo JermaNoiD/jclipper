@@ -1,157 +1,194 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jclipper - History</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {},
-            },
-        };
-        // Inline script to set initial theme
-        (function() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        })();
-    </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        /* Hide scrollbar for cross-browser compatibility */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
-        }
-        /* Override any inline block styles */
-        li[style*="display: block"] {
-            display: flex !important;
-            justify-content: flex-end !important;
-        }
-    </style>
-</head>
-<body id="theme-body" class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col transition-colors duration-300">
-    <nav class="bg-gray-100 flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:bg-gray-900 dark:border-gray-700 transition-colors duration-300">
-        <div class="flex items-center space-x-4">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" width="46" height="46" alt="Jclipper logo">
-            <a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white transition-colors duration-300">Jclipper</a>
-        </div>
-        <div class="flex items-center space-x-4">
-            <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors duration-300" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                </svg>
-            </button>
-            <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
-                <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors duration-300">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors duration-300">History</a></li>
-                </ul>
-            </div>
-            <div class="flex items-center">
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="lightSwitch" class="sr-only peer" title="Toggle dark mode" onchange="toggleTheme()">
-                    <i class="fas fa-sun w-5 h-5 text-yellow-400 peer-checked:hidden transition-colors duration-300"></i>
-                    <i class="fas fa-moon w-5 h-5 text-gray-200 hidden peer-checked:block transition-colors duration-300"></i>
-                </label>
-            </div>
-        </div>
-    </nav>
-    <nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
-        <div class="container mx-auto px-4">
-            <div class="flex justify-center">
-                <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search history..." onkeyup="filterHistory()">
-            </div>
-        </div>
-    </nav>
-    <div class="container mx-auto mt-8 px-4 flex-grow">
-        <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
-            {% if file_data %}
-                <ul class="space-y-2">
-                    {% for full_path, basename in file_data %}
-                        <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700 flex items-center w-full min-w-[250px]" style="display: flex; justify-content: flex-end;">
-                            <div class="flex-1 pr-12">
-                                <a href="{{ url_for('download', file=full_path) }}" class="text-gray-900 dark:text-gray-200">{{ basename }}</a>
-                            </div>
-                            <div class="flex">
-                                <i class="fas fa-trash text-red-500 cursor-pointer" onclick="deleteFile('{{ full_path }}')"></i>
-                            </div>
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No history available</div>
-            {% endif %}
-        </div>
-        <div class="flex justify-center mt-4">
-            <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300" onclick="clearAllClips()">Clear All Clips</button>
+{% extends 'base.html' %}
+{% block title %}Jclipper - Output{% endblock %}
+{% block content %}
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+    <div class="container mx-auto px-4">
+        <div class="flex justify-center">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search history..." onkeyup="filterHistory()">
         </div>
     </div>
-    <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-    <script>
-        function filterHistory() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const items = document.querySelectorAll('ul li');
-            items.forEach(item => {
-                const text = item.textContent.toLowerCase();
-                item.style.display = searchTerm && !text.includes(searchTerm) ? 'none' : '';
-            });
-        }
-    
-        function deleteFile(filePath) {
-            fetch('/delete', {
+</nav>
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+        {% if file_data %}
+            <ul class="space-y-2">
+                {% for full_path, basename in file_data %}
+                    {% set base_no_ext = basename | splitext | first %}
+                    {% set parts = base_no_ext | split('_') %}
+                    {% set to_index = namespace(value=-1) %}
+                    {% for part in parts %}
+                        {% if part == 'to' %}
+                            {% set to_index.value = loop.index0 %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if to_index.value != -1 %}
+                        {% set timestamp_start = parts[to_index.value - 1] | replace('-', ':') | regex_replace('\\.[0-9]{3}$', '') if to_index.value > 0 else '' %}
+                        {% set timestamp_end = parts[to_index.value + 1] | replace('-', ':') | regex_replace('\\.[0-9]{3}$', '') if to_index.value + 1 < parts | length else '' %}
+                        {% set last_part = parts | last %}
+                        {% set resolution = last_part %}
+                        {% set padding = '' %}
+                        {% if last_part | regex_match('^\\d+x\\d+p\\d+(\\.\\d+)?$') %}
+                            {% set res_parts = last_part | split('p') %}
+                            {% if res_parts | length == 2 %}
+                                {% set resolution = res_parts[0] %}
+                                {% set padding = res_parts[1] %}
+                            {% endif %}
+                        {% endif %}
+                        {% set movie_parts = parts[0:to_index.value - 1] if to_index.value > 1 else [] %}
+                    {% else %}
+                        {% set movie_parts = parts %}
+                    {% endif %}
+                    {% set movie_name = movie_parts | join(' ') | default('Unnamed Clip', true) %}
+                    {% set timestamp = timestamp_start ~ ' - ' ~ timestamp_end if timestamp_start and timestamp_end else '' %}
+                    {% set filetype = basename | splitext | last | replace('.', '') | upper %}
+                    <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700 flex items-center justify-between w-full min-w-[250px]" style="display: flex; justify-content: space-between;">
+                        <div class="flex flex-col pr-4 w-full">
+                            <a href="{{ url_for('preview', history_file=full_path) }}" class="text-gray-900 dark:text-gray-200 font-semibold mb-2">{{ movie_name }}</a>
+                            <div class="flex flex-wrap gap-1">
+                                {% if timestamp %}
+                                <span class="text-xs text-gray-900 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">{{ timestamp }}</span>
+                                {% endif %}
+                                {% if resolution %}
+                                <span class="text-xs text-gray-900 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">{{ resolution }}</span>
+                                {% endif %}
+                                {% if padding %}
+                                <span class="text-xs text-gray-900 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">Pad: {{ padding }}s</span>
+                                {% endif %}
+                                {% if filetype %}
+                                <span class="text-xs text-gray-900 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">{{ filetype }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            {% if s3_enabled %}
+                            <div class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors duration-300 flex items-center space-x-2">
+                                <i class="fas fa-share-alt cursor-pointer" onclick="shareFile('{{ full_path }}', '{{ basename }}')"></i>
+                            </div>
+                            {% else %}
+                            <div class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" title="Sharing is disabled because S3 is not configured">
+                                <i class="fas fa-share-alt"></i>
+                            </div>
+                            {% endif %}
+                            <div class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300 flex items-center space-x-2">
+                                <i class="fas fa-trash cursor-pointer" onclick="deleteFile('{{ full_path }}')"></i>
+                            </div>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No history available</div>
+        {% endif %}
+    </div>
+    <div class="flex justify-center mt-4">
+        <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300" onclick="clearAllClips()">Clear All Clips</button>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script>
+    function filterHistory() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const items = document.querySelectorAll('ul li');
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = searchTerm && !text.includes(searchTerm) ? 'none' : '';
+        });
+    }
+
+    function deleteFile(filePath) {
+        fetch('/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'file_path=' + encodeURIComponent(filePath)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement.parentElement;
+                if (item) item.remove();
+            } else {
+                alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error during delete fetch: ' + error);
+            alert('An error occurred while deleting the file.');
+        });
+    }
+
+    function clearAllClips() {
+        if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
+            fetch('/clear_all', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'file_path=' + encodeURIComponent(filePath)
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement;
-                    if (item) item.remove();
+                    location.reload();
                 } else {
-                    alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+                    alert('Failed to clear all clips: ' + (data.message || 'Unknown error'));
+                    location.reload();
                 }
             })
             .catch(error => {
-                console.error('Error during delete fetch: ' + error);
-                alert('An error occurred while deleting the file.');
+                console.error('Error during clear all fetch: ' + error);
+                alert('An error occurred while clearing all clips.');
             });
         }
-    
-        function clearAllClips() {
-            if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
-                fetch('/clear_all', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
+    }
+
+    function shareFile(filePath, basename) {
+        const parts = basename.split('_');
+        const movieName = parts[0].replace(/_/g, ' ') || 'Video Clip';
+        const text = "Check out this video clip from Jclipper!";
+        {% if s3_enabled %}
+        fetch('/upload_s3?file=' + encodeURIComponent(filePath))
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (navigator.share) {
+                        navigator.share({
+                            title: movieName,
+                            text: text,
+                            url: data.url
+                        }).then(() => {
+                            console.log('Shared successfully');
+                        }).catch(err => {
+                            console.error('Share failed:', err);
+                            navigator.clipboard.writeText(data.url).then(() => {
+                                alert('Share not supported. Video link copied to clipboard!');
+                            }).catch(err => {
+                                console.error('Failed to copy:', err);
+                                alert('Share not supported and failed to copy video link.');
+                            });
+                        });
                     } else {
-                        alert('Failed to clear all clips: ' + (data.message || 'Unknown error'));
-                        location.reload();
+                        navigator.clipboard.writeText(data.url).then(() => {
+                            alert('Share not supported. Video link copied to clipboard!');
+                        }).catch(err => {
+                            console.error('Failed to copy:', err);
+                            alert('Share not supported and failed to copy video link.');
+                        });
                     }
-                })
-                .catch(error => {
-                    console.error('Error during clear all fetch: ' + error);
-                    alert('An error occurred while clearing all clips.');
-                });
-            }
-        }
-    
-        // Initialize with no filtering
-        window.addEventListener('load', () => {
-            filterHistory();
-        });
-    </script>
-</body>
-</html>
+                } else {
+                    alert('S3 upload failed: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('S3 upload error:', error);
+                alert('S3 upload failed.');
+            });
+        {% else %}
+        alert('Sharing is not available because S3 is not configured.');
+        {% endif %}
+    }
+
+    window.addEventListener('load', () => {
+        filterHistory();
+    });
+</script>
+{% endblock %}

@@ -23,6 +23,10 @@ app.logger.setLevel(logging.INFO)
 app.jinja_env.filters['basename'] = os.path.basename
 app.jinja_env.filters['dirname'] = os.path.dirname
 app.jinja_env.filters['unquote'] = unquote
+app.jinja_env.filters['splitext'] = os.path.splitext
+app.jinja_env.filters['split'] = lambda value, delimiter: value.split(delimiter)
+app.jinja_env.filters['regex_match'] = lambda value, pattern: bool(re.match(pattern, value))
+app.jinja_env.filters['regex_replace'] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
 
 # Environment variables
 MOVIES_DIR = os.getenv('MOVIES_DIR', '/movies')
@@ -70,21 +74,40 @@ video_info_cache = {}
 
 # Cache movies on startup
 movies = []
-for dir_name in sorted(os.listdir(MOVIES_DIR)):
-    dir_path = os.path.join(MOVIES_DIR, dir_name)
-    if os.path.isdir(dir_path):
-        videos = [f for f in os.listdir(dir_path) if any(f.lower().endswith(ext) for ext in VIDEO_EXTS)]
-        srts = [f for f in os.listdir(dir_path) if f.lower().endswith('.srt')]
-        if videos:
-            video_path = os.path.join(dir_path, videos[0])
-            srt_path = None
-            for srt_file in srts:
-                if f'.{DEFAULT_LANGUAGE.lower()}.srt' in srt_file.lower():
-                    srt_path = os.path.join(dir_path, srt_file)
-                    break
-            if not srt_path and srts:
-                srt_path = os.path.join(dir_path, srts[0])
-            movies.append({'name': dir_name, 'video': video_path, 'srt': srt_path, 'has_srt': bool(srts)})
+for root, dirs, files in os.walk(MOVIES_DIR):
+    videos = [f for f in files if any(f.lower().endswith('.' + ext) for ext in VIDEO_EXTS)]
+    srts = [f for f in files if f.lower().endswith('.srt')]
+    for video in videos:
+        video_path = os.path.join(root, video)
+        video_base = os.path.splitext(video)[0]
+        srt_path = None
+        lang_suffix = f'.{DEFAULT_LANGUAGE.lower()}'
+
+        # Prefer video_base.lang.srt
+        candidate = video_base + lang_suffix + '.srt'
+        matching = next((s for s in srts if s.lower() == candidate.lower()), None)
+        if matching:
+            srt_path = os.path.join(root, matching)
+        else:
+            # Then video_base.srt
+            candidate = video_base + '.srt'
+            matching = next((s for s in srts if s.lower() == candidate.lower()), None)
+            if matching:
+                srt_path = os.path.join(root, matching)
+            else:
+                # Then any with lang
+                matching = next((s for s in srts if lang_suffix in s.lower()), None)
+                if matching:
+                    srt_path = os.path.join(root, matching)
+                elif srts:
+                    # Then any srt
+                    srt_path = os.path.join(root, srts[0])
+
+        name = os.path.relpath(video_path, MOVIES_DIR)
+        has_srt = bool(srt_path)
+        movies.append({'name': name, 'video': video_path, 'srt': srt_path, 'has_srt': has_srt})
+
+movies = sorted(movies, key=lambda m: os.path.splitext(os.path.basename(m['name']))[0].lower())
 if STARTUP_SCAN_LOG_ENABLED:
     for m in movies:
         app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")
@@ -434,43 +457,63 @@ def generate():
 @app.route('/preview')
 def preview():
     app.logger.info(f"Entering preview route, session: {session}")
-    preview = session.get('preview')
-    output = session.get('output')
-    start = request.args.get('start', session.get('start'))
-    end = request.args.get('end', session.get('end'))
-    video = request.args.get('video', session.get('movie'))
-    if start and end and video:
-        session['start'] = start
-        session['end'] = end
-        session['movie'] = video
+    history_file = request.args.get('history_file')
+    from_history = bool(history_file)
+    if from_history:
+        output = history_file
+        format = os.path.splitext(output)[1][1:].lower()
+        main_status = 'success'
+        encoding_done = True
+        main_ffmpeg_output = ''
+        preview = output  # Use the file directly
+        # Extract movie_name from basename
+        basename = os.path.basename(output)
+        movie_name = basename.split('_')[0].replace('_', ' ')
+        # Set session for download/share
+        session['output'] = output
+        session['format'] = format
         session.modified = True
-        app.logger.info(f"Updated session from query params in preview: Start={start}, End={end}, Video={video}, Session={session}")
-    if not preview or not os.path.exists(preview):
-        app.logger.warning(f"No preview file or file not found: {preview}, redirecting to index")
-        return redirect(url_for('index'))
-    main_status = 'encoding'
-    main_ffmpeg_output = ''
-    encoding_done = False
-    temp_job_dir = session.get('temp_job_dir')
-    if temp_job_dir and output:
-        encoding_file = os.path.join(temp_job_dir, 'encoding')
-        success_file = os.path.join(temp_job_dir, 'success')
-        log_file = os.path.join(temp_job_dir, 'log.txt')
-        if os.path.exists(encoding_file):
-            main_status = 'encoding'
-        elif os.path.exists(success_file):
-            main_status = 'success'
-            encoding_done = True
-        else:
-            main_status = 'failure'
-            encoding_done = True
-        if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
-                main_ffmpeg_output = f.read()
-    app.logger.info(f"Preview context: preview={preview}, output={output}, encoding_done={encoding_done}, main_status={main_status}")
+    else:
+        preview = session.get('preview')
+        output = session.get('output')
+        start = request.args.get('start', session.get('start'))
+        end = request.args.get('end', session.get('end'))
+        video = request.args.get('video', session.get('movie'))
+        if start and end and video:
+            session['start'] = start
+            session['end'] = end
+            session['movie'] = video
+            session.modified = True
+            app.logger.info(f"Updated session from query params in preview: Start={start}, End={end}, Video={video}, Session={session}")
+        if not preview or not os.path.exists(preview):
+            app.logger.warning(f"No preview file or file not found: {preview}, redirecting to index")
+            return redirect(url_for('index'))
+        main_status = 'encoding'
+        main_ffmpeg_output = ''
+        encoding_done = False
+        temp_job_dir = session.get('temp_job_dir')
+        if temp_job_dir and output:
+            encoding_file = os.path.join(temp_job_dir, 'encoding')
+            success_file = os.path.join(temp_job_dir, 'success')
+            log_file = os.path.join(temp_job_dir, 'log.txt')
+            if os.path.exists(encoding_file):
+                main_status = 'encoding'
+            elif os.path.exists(success_file):
+                main_status = 'success'
+                encoding_done = True
+            else:
+                main_status = 'failure'
+                encoding_done = True
+            if os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    main_ffmpeg_output = f.read()
+        # Extract movie_name from video path
+        movie_name = os.path.splitext(os.path.basename(video))[0]
+
+    app.logger.info(f"Preview context: preview={preview}, output={output}, encoding_done={encoding_done}, main_status={main_status}, from_history={from_history}")
     s3_enabled = all([S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_KEY, S3_SECRET])
     app.logger.info(f"Preview route: s3_enabled={s3_enabled}")
-    return render_template('preview.html', file=preview, output=output, format=session.get('format', 'mp4'), start=start, end=end, video=video, encoding_done=encoding_done, main_status=main_status, main_ffmpeg_output=main_ffmpeg_output, s3_enabled=s3_enabled)
+    return render_template('preview.html', file=preview, output=output, format=session.get('format', format), start=start if not from_history else None, end=end if not from_history else None, video=video if not from_history else None, encoding_done=encoding_done, main_status=main_status, main_ffmpeg_output=main_ffmpeg_output, s3_enabled=s3_enabled, movie_name=movie_name, from_history=from_history)
 
 @app.route('/status')
 def get_status():
@@ -621,7 +664,10 @@ def history():
     full_paths = [os.path.join(OUTPUT_DIR, f) for f in output_files]
     file_data = [(full_path, os.path.basename(full_path)) for full_path in full_paths]
     app.logger.info(f"Found output files: {[basename for _, basename in file_data]}")
-    return render_template('history.html', file_data=file_data)
+    for _, basename in file_data:
+        app.logger.info(f"Parsing basename: {basename}, parts: {basename.split('_')}")
+    s3_enabled = all([S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_KEY, S3_SECRET])
+    return render_template('history.html', file_data=file_data, s3_enabled=s3_enabled)
 
 @app.route('/delete', methods=['POST'])
 def delete():

@@ -20,13 +20,37 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .pulse-animation { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { background-color: #f3f4f6; } 50% { background-color: #d1d5db; } 100% { background-color: #f3f4f6; } }
-        .dark .pulse-animation { animation: pulse-dark 1.5s infinite; }
-        @keyframes pulse-dark { 0% { background-color: #1f2937; } 50% { background-color: #374151; } 100% { background-color: #1f2937; } }
-        .icon-container { opacity: 0.8; display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem; border-radius: 0.375rem; }
+        .no-scrollbar::-webkit-scrollbar { 
+            display: none; 
+        }
+        .no-scrollbar { 
+            -ms-overflow-style: none; 
+            scrollbar-width: none; 
+        }
+        .pulse-animation { 
+            animation: pulse 1.5s infinite; 
+        }
+        @keyframes pulse { 
+            0% { background-color: #f3f4f6; } 
+            50% { background-color: #d1d5db; } 
+            100% { background-color: #f3f4f6; } 
+        }
+        .dark .pulse-animation { 
+            animation: pulse-dark 1.5s infinite; 
+        }
+        @keyframes pulse-dark { 
+            0% { background-color: #1f2937; } 
+            50% { background-color: #374151; } 
+            100% { background-color: #1f2937; } 
+        }
+        .icon-container { 
+            opacity: 0.8; 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 0.5rem; 
+            border-radius: 0.375rem; 
+        }
         .highlight {
             background-color: #FBBF24; /* Tailwind yellow-400 as fallback */
             color: #1F2937; /* Tailwind gray-800 for dark text */
@@ -40,6 +64,19 @@
         }
         .dark .bg-gradient-green-red {
             background: linear-gradient(to right, #064E3B, #7F1D1D); /* green-900 to red-900 */
+        }
+        .movie-tag {
+            display: inline-block;
+            background-color: #e0e0e0;
+            color: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-right: 8px;
+        }
+        li[style*="display: block"] {
+            display: flex !important;
+            justify-content: space-between !important;
         }
     </style>
     {% block head %}{% endblock %}
