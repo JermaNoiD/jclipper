@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% block title %}Jclipper - Preview{% endblock %}
+{% block title %}Jclipper - Subtitles{% endblock %}
 {% block content %}
 <nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
     <div class="container mx-auto px-4">
@@ -9,7 +9,8 @@
     </div>
 </nav>
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
+    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ pretty_movie_name }}</h1>
+    <div class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
         {% if subs %}
         <form id="subtitle-form" method="POST" action="{{ url_for('output') }}">
             <input type="hidden" id="startTime" name="start">

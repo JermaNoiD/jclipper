@@ -2,7 +2,8 @@
 {% block title %}Jclipper - Preview{% endblock %}
 {% block content %}
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
+    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ movie_name }}</h1>
+    <div id="previewContainer" class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
         <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
             Main encoding failed. Check FFmpeg output below for details.
         </div>
@@ -25,6 +26,11 @@
             Failed to load media. Try downloading or using a different format.
         </div>
         <div class="mt-4 flex justify-center space-x-4">
+            {% if from_history %}
+            <a href="{{ url_for('history') }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors   flex items-center" title="Back to History">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            {% endif %}
             <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Download">
                 <i class="fas fa-download"></i>
             </button>
@@ -35,6 +41,11 @@
             {% else %}
             <button id="share-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center" disabled title="Sharing is disabled because S3 is not configured">
                 <i class="fas fa-share-alt"></i>
+            </button>
+            {% endif %}
+            {% if from_history %}
+            <button id="delete-btn" onclick="deleteFile('{{ output }}')" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center" title="Delete">
+                <i class="fas fa-trash"></i>
             </button>
             {% endif %}
             {% if not from_history %}
@@ -59,7 +70,7 @@
             </div>
         </div>
         <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg w-full">
-            <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
+            <pre class="text-[8px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
         </div>
     </div>
     {% endif %}
@@ -69,6 +80,29 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
 <script>
+    function deleteFile(filePath) {
+            console.log('Deleting file:', filePath);
+            if (confirm('Are you sure you want to delete this clip?')) {
+                fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'file_path=' + encodeURIComponent(filePath)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Delete response:', data);
+                    if (data.success) {
+                        window.location.href = '{{ url_for('history') }}';
+                    } else {
+                        alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during delete fetch:', error);
+                    alert('An error occurred while deleting the file.');
+                });
+            }
+        }
     function uploadToS3() {
         fetch('/upload_s3')
             .then(response => response.json())

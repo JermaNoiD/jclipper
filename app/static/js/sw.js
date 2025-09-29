@@ -1,19 +1,15 @@
-// /app/static/sw.js
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Take control immediately
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim()); // Take control of all clients
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', event => {
   console.log('Service Worker fetching:', event.request.url);
-  // Pass through media requests to /serve without caching
-  if (event.request.url.includes('/serve?file=')) {
-    event.respondWith(fetch(event.request));
-  } else if (event.request.url.endsWith('.js') || event.request.url.endsWith('.css')) {
-    // Cache JS and CSS files
+  // Only cache JS and CSS files, let /serve requests pass through
+  if (event.request.url.endsWith('.js') || event.request.url.endsWith('.css')) {
     event.respondWith(
       caches.open('jclipper-cache').then(cache => {
         return cache.match(event.request).then(response => {
@@ -25,4 +21,5 @@ self.addEventListener('fetch', event => {
       })
     );
   }
+  // No handling for /serve?file=; browser handles natively
 });

@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Jclipper - Output{% endblock %}
 {% block content %}
+
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-200 mb-4">Output Settings</h2>
+    <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ pretty_movie_name }}</h1>
+    <div class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
+        <h2 class="text-xl text-center font-semibold text-gray-900 dark:text-gray-200 mb-4">Output Settings</h2>
         <form method="POST" action="{{ url_for('generate') }}" class="space-y-4" id="generate-form">
             <input type="hidden" name="start" value="{{ start }}">
             <input type="hidden" name="end" value="{{ end }}">

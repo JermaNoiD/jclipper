@@ -210,7 +210,10 @@ def subtitles():
             app.logger.error(f"Error reading SRT file {srt_path}: {str(e)}")
     else:
         app.logger.warning(f"No SRT file found for {movie}")
-    return render_template('subtitles.html', subs=subs, movie=movie)
+    movie_base = os.path.splitext(os.path.basename(movie))[0]
+    pretty_movie_name = clean_movie_name(movie_base)
+    app.logger.info(f"Passing pretty_movie_name: {pretty_movie_name} to subtitles.html")
+    return render_template('subtitles.html', subs=subs, movie=movie, pretty_movie_name=pretty_movie_name)
 
 @app.route('/output', methods=['GET', 'POST'])
 def output():
@@ -267,6 +270,9 @@ def output():
         session['audio_index'] = audio_index
     
     app.logger.info(f"Session in output before check: {session}")
+    movie_base = os.path.splitext(os.path.basename(video))[0]
+    pretty_movie_name = clean_movie_name(movie_base)
+    app.logger.info(f"Passing pretty_movie_name: {pretty_movie_name} to output.html")
     return render_template('output.html',
                           original_res=res,
                           start=start,
@@ -277,7 +283,12 @@ def output():
                           source_format=source_format,
                           has_multiple_audio=has_multiple_audio,
                           audio_streams=processed_audio_streams,
-                          audio_index=audio_index)
+                          audio_index=audio_index,
+                          pretty_movie_name=pretty_movie_name)
+
+    movie_base = os.path.splitext(os.path.basename(video))[0]
+    pretty_movie_name = clean_movie_name(movie_base)
+    return render_template('output.html', ..., pretty_movie_name=pretty_movie_name)
 
 def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index):
     with app.app_context():
@@ -529,6 +540,7 @@ def preview():
         # Extract movie_name from video path
         movie_name = os.path.splitext(os.path.basename(video))[0] if video else 'Video Clip'
         app.logger.info(f"Parsed movie_name: {movie_name} from video: {video}")
+        app.logger.info(f"Preview file: {preview}, exists: {os.path.exists(preview)}, output: {output}, exists: {os.path.exists(output) if output else False}")
     
     app.logger.info(f"Preview context: preview={preview}, output={output}, encoding_done={encoding_done}, main_status={main_status}, from_history={from_history}")
     s3_enabled = all([os.getenv('S3_ENDPOINT'), os.getenv('S3_REGION'), os.getenv('S3_BUCKET'), os.getenv('S3_KEY'), os.getenv('S3_SECRET')])
@@ -796,7 +808,7 @@ def timedelta_from_str(time_str):
 @app.route('/serve')
 def serve():
     file = request.args.get('file')
-    app.logger.info(f"Attempting to serve file: {file}")
+    app.logger.info(f"Serving file: {file}, from user-agent: {request.user_agent.string}, method: {request.method}")
     if file and os.path.exists(file):
         mime_type = (
             'video/mp4' if file.endswith('.mp4') else
@@ -805,7 +817,7 @@ def serve():
             'audio/mpeg' if file.endswith('.mp3') else
             'application/octet-stream'
         )
-        app.logger.info(f"Serving file: {file} with MIME type: {mime_type}")
+        app.logger.info(f"Serving file: {file} with MIME type: {mime_type}, exists: {os.path.exists(file)}, size: {os.path.getsize(file) if os.path.exists(file) else 0}")
         try:
             response = send_file(file, mimetype=mime_type, as_attachment=False)
             response.headers['Accept-Ranges'] = 'bytes'
@@ -813,6 +825,7 @@ def serve():
             response.headers['Access-Control-Allow-Origin'] = '*'
             response.headers['Content-Type'] = mime_type
             response.headers['Cache-Control'] = 'no-cache'
+            app.logger.info(f"Response headers: {dict(response.headers)}")
             return response
         except Exception as e:
             app.logger.error(f"Failed to serve file {file}: {str(e)}")

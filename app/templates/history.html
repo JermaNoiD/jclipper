@@ -41,7 +41,7 @@
                     {% set movie_name = movie_parts | join(' ') | default('Unnamed Clip', true) %}
                     {% set timestamp = timestamp_start ~ ' - ' ~ timestamp_end if timestamp_start and timestamp_end else '' %}
                     {% set filetype = basename | splitext | last | replace('.', '') | upper %}
-                    <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer dark:hover:bg-gray-700 flex items-center justify-between w-full min-w-[250px]" style="display: flex; justify-content: space-between;">
+                    <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer dark:hover:bg-gray-700 flex items-center justify-between w-full min-w-[250px]" style="display: flex; justify-content: space-between;" data-file-path="{{ full_path | e }}">
                         <div class="flex flex-col pr-4 w-full">
                             <a href="{{ url_for('preview', history_file=full_path) }}" class="text-gray-900 dark:text-gray-200 font-semibold mb-2">{{ movie_name }}</a>
                             <div class="flex flex-wrap gap-1">
@@ -70,7 +70,7 @@
                             </div>
                             {% endif %}
                             <div class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center space-x-2">
-                                <i class="fas fa-trash cursor-pointer" onclick="deleteFile('{{ full_path }}')"></i>
+                                <i class="fas fa-trash cursor-pointer" onclick="deleteFile(this)"></i>
                             </div>
                         </div>
                     </li>
@@ -98,28 +98,29 @@
         });
     }
 
-    function deleteFile(filePath) {
-        console.log('Deleting file:', filePath);
-        fetch('/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'file_path=' + encodeURIComponent(filePath)
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('Delete response:', data);
-            if (data.success) {
-                const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement.parentElement;
-                if (item) item.remove();
-            } else {
-                alert('Failed to delete file: ' + (data.message || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error during delete fetch:', error);
-            alert('An error occurred while deleting the file.');
-        });
-    }
+    function deleteFile(element) {
+    const filePath = element.closest('li').getAttribute('data-file-path');
+    console.log('Deleting file:', filePath);
+    fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'file_path=' + encodeURIComponent(filePath)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Delete response:', data);
+        if (data.success) {
+            const item = element.closest('li');
+            if (item) item.remove();
+        } else {
+            alert('Failed to delete file: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error during delete fetch:', error);
+        alert('An error occurred while deleting the file.');
+    });
+}
 
     function clearAllClips() {
         if (confirm('Are you sure you want to delete all clips? This action cannot be undone.')) {
