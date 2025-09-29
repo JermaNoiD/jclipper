@@ -14,6 +14,16 @@ import srt
 from urllib.parse import unquote
 import boto3
 
+# Define clean_movie_name before filter registration
+def clean_movie_name(name):
+    name = re.sub(r'\.', ' ', name)
+    year_match = re.search(r'(\s|\.)(\d{4})(\s|\.|$)', name)
+    if year_match:
+        pos = year_match.end(2)
+        name = name[:pos]
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 app.permanent_session_lifetime = timedelta(minutes=30)
@@ -27,6 +37,7 @@ app.jinja_env.filters['splitext'] = os.path.splitext
 app.jinja_env.filters['split'] = lambda value, delimiter: value.split(delimiter)
 app.jinja_env.filters['regex_match'] = lambda value, pattern: bool(re.match(pattern, value))
 app.jinja_env.filters['regex_replace'] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
+app.jinja_env.filters['clean_movie_name'] = clean_movie_name
 
 # Environment variables
 MOVIES_DIR = os.getenv('MOVIES_DIR', '/movies')
@@ -230,11 +241,11 @@ def output():
     
     # Process audio streams for display
     processed_audio_streams = []
-    for s in audio_streams:
+    for idx, s in enumerate(audio_streams):
         tags = s.get('tags', {})
         lang = tags.get('language', 'Unknown').capitalize()
         processed_audio_streams.append({
-            'index': s['index'],
+            'nth': idx,
             'lang': lang,
             'codec': s.get('codec_name', 'Unknown').upper(),
             'channels': s.get('channels', 'Unknown')
@@ -454,7 +465,7 @@ def generate():
     threading.Thread(target=copy_current_request_context(encode_main), args=(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index), daemon=True).start()
     return redirect(url_for('preview', start=start_str, end=end_str, video=video))
 
-@app.route('/preview')
+@app.route('/preview', methods=['GET'])
 def preview():
     app.logger.info(f"Entering preview route, session: {session}")
     history_file = request.args.get('history_file')
@@ -468,7 +479,14 @@ def preview():
         preview = output  # Use the file directly
         # Extract movie_name from basename
         basename = os.path.basename(output)
-        movie_name = basename.split('_')[0].replace('_', ' ')
+        parts = basename.split('_')
+        movie_parts = []
+        for part in parts:
+            if re.match(r'\d{2}-\d{2}-\d{2}\.\d{3}', part):
+                break
+            movie_parts.append(part.replace('_', ' '))
+        movie_name = ' '.join(movie_parts) if movie_parts else 'Video Clip'
+        app.logger.info(f"Parsed movie_name: {movie_name} from basename: {basename}")
         # Set session for download/share
         session['output'] = output
         session['format'] = format
@@ -476,6 +494,7 @@ def preview():
     else:
         preview = session.get('preview')
         output = session.get('output')
+        format = session.get('format')
         start = request.args.get('start', session.get('start'))
         end = request.args.get('end', session.get('end'))
         video = request.args.get('video', session.get('movie'))
@@ -508,13 +527,13 @@ def preview():
                 with open(log_file, 'r') as f:
                     main_ffmpeg_output = f.read()
         # Extract movie_name from video path
-        movie_name = os.path.splitext(os.path.basename(video))[0]
-
+        movie_name = os.path.splitext(os.path.basename(video))[0] if video else 'Video Clip'
+        app.logger.info(f"Parsed movie_name: {movie_name} from video: {video}")
+    
     app.logger.info(f"Preview context: preview={preview}, output={output}, encoding_done={encoding_done}, main_status={main_status}, from_history={from_history}")
-    s3_enabled = all([S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_KEY, S3_SECRET])
+    s3_enabled = all([os.getenv('S3_ENDPOINT'), os.getenv('S3_REGION'), os.getenv('S3_BUCKET'), os.getenv('S3_KEY'), os.getenv('S3_SECRET')])
     app.logger.info(f"Preview route: s3_enabled={s3_enabled}")
-    return render_template('preview.html', file=preview, output=output, format=session.get('format', format), start=start if not from_history else None, end=end if not from_history else None, video=video if not from_history else None, encoding_done=encoding_done, main_status=main_status, main_ffmpeg_output=main_ffmpeg_output, s3_enabled=s3_enabled, movie_name=movie_name, from_history=from_history)
-
+    return render_template('preview.html', file=preview, output=output, format=format, start=start if not from_history else None, end=end if not from_history else None, video=video if not from_history else None, encoding_done=encoding_done, main_status=main_status, main_ffmpeg_output=main_ffmpeg_output, s3_enabled=s3_enabled, movie_name=movie_name, from_history=from_history)
 @app.route('/status')
 def get_status():
     temp_job_dir = session.get('temp_job_dir')
@@ -617,6 +636,8 @@ def cancel_encoding():
             app.logger.info(f"Cancelled FFmpeg PID: {pid}")
         except Exception as e:
             app.logger.error(f"Failed to cancel PID {pid}: {str(e)}")
+    
+    # Remove preview file
     preview = session.get('preview')
     if preview and os.path.exists(preview):
         try:
@@ -624,7 +645,17 @@ def cancel_encoding():
             app.logger.info(f"Removed preview file on cancel: {preview}")
         except Exception as e:
             app.logger.error(f"Failed to remove preview file on cancel {preview}: {str(e)}")
+    
+    # Remove output file
     output = session.get('output')
+    if output and os.path.exists(output):
+        try:
+            os.remove(output)
+            app.logger.info(f"Removed output file on cancel: {output}")
+        except Exception as e:
+            app.logger.error(f"Failed to remove output file on cancel {output}: {str(e)}")
+    
+    # Remove temp job directory
     temp_job_dir = session.get('temp_job_dir')
     if temp_job_dir and os.path.exists(temp_job_dir):
         try:
@@ -632,10 +663,35 @@ def cancel_encoding():
             app.logger.info(f"Removed temp job dir on cancel: {temp_job_dir}")
         except Exception as e:
             app.logger.error(f"Failed to remove temp job dir on cancel {temp_job_dir}: {str(e)}")
+    
+    # Update job_dirs in session
     if output:
         session['job_dirs'] = session.get('job_dirs', {})
         session['job_dirs'].pop(output, None)
-        session.modified = True
+    
+    # Preserve movie, start, and end for Modify
+    movie = session.get('movie')
+    start = session.get('start')
+    end = session.get('end')
+    
+    # Clear session variables except for movie, start, and end
+    session.pop('preview', None)
+    session.pop('output', None)
+    session.pop('format', None)
+    session.pop('padding', None)
+    session.pop('scale_factor', None)
+    session.pop('temp_job_dir', None)
+    session.pop('audio_index', None)
+    session.pop('encoding_pid', None)
+    session.modified = True
+    
+    next_page = request.args.get('next', 'index')
+    if next_page == 'output' and movie and start and end:
+        # Redirect to output with preserved parameters
+        return redirect(url_for('output', video=movie, start=start, end=end))
+    return redirect(url_for(next_page))
+    
+    # Clear session variables
     session.pop('preview', None)
     session.pop('output', None)
     session.pop('format', None)
@@ -644,6 +700,7 @@ def cancel_encoding():
     session.pop('temp_job_dir', None)
     session.pop('audio_index', None)
     session.modified = True
+    
     next_page = request.args.get('next', 'index')
     return redirect(url_for(next_page))
 

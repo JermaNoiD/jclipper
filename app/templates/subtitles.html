@@ -1,194 +1,53 @@
 ﻿{% extends 'base.html' %}
 {% block title %}Jclipper - Preview{% endblock %}
 {% block content %}
-<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
     <div class="container mx-auto px-4">
         <div class="flex justify-center">
-            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
-        </div>
-        <div class="flex justify-center space-x-4 mt-4">
-            <button type="button" onclick="clearSelections()" class="bg-gray-400 text-gray-900 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-300 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-700">Clear Selections</button>
-            <form id="clipForm" action="{{ url_for('output') }}" method="POST" onsubmit="return validateForm()">
-                <input type="hidden" id="startTime" name="start" value="">
-                <input type="hidden" id="endTime" name="end" value="">
-                <input type="hidden" name="video" value="{{ movie if movie else '' }}">
-                <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-gray-600" id="submitButton" disabled>Create Clip</button>
-            </form>
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
         </div>
     </div>
 </nav>
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
         {% if subs %}
-        <div class="space-y-2" id="subtitleList">
-            {% for sub in subs %}
-            <div class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700" onclick="selectSubtitle('{{ loop.index0 }}')" data-original-content="{{ sub.content }}" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}">
-                <strong class="text-gray-700 dark:text-gray-300 transition-colors duration-300">{{ sub.start_str }} --> {{ sub.end_str }}</strong>
-                <div class="subtitle-content text-gray-800 dark:text-gray-200 transition-colors duration-300">{{ sub.content }}</div>
-            </div>
-            {% endfor %}
-        </div>
+        <form id="subtitle-form" method="POST" action="{{ url_for('output') }}">
+            <input type="hidden" id="startTime" name="start">
+            <input type="hidden" id="endTime" name="end">
+            <input type="hidden" name="video" value="{{ movie }}">
+            <ul class="space-y-2">
+                {% for sub in subs %}
+                <li class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors dark:hover:bg-gray-700 flex" onclick="toggleSelection(this)" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}" data-original-content="{{ sub.content }}">
+                    <div class="w-1/4 flex flex-col justify-between text-gray-500 dark:text-gray-400 text-xs">
+                        <p>{{ sub.start_str }}</p>
+                        <p>{{ sub.end_str }}</p>
+                    </div>
+                    <div class="subtitle-content flex-1 pl-4 text-gray-900 dark:text-gray-200">
+                        {{ sub.content }}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </form>
         {% else %}
-        <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No subtitle file available</div>
+        <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors">No subtitle file available</div>
         {% endif %}
+    </div>
+    <div class="mt-4 flex justify-center space-x-4 max-w-3xl mx-auto">
+        <a href="{{ url_for('index') }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" title="Back to Movies">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <button class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" onclick="clearSelections()" title="Clear Selections">
+            <i class="fas fa-eraser"></i>
+        </button>
+        <button id="submitButton" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 dark:bg-green-400 dark:hover:bg-green-300 transition-colors flex items-center" onclick="createClip()" title="Create Clip" disabled>
+            <i class="fas fa-check-circle"></i>
+        </button>
     </div>
 </div>
 {% endblock %}
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
-<script>
-    let startIndex = -1;
-    let endIndex = -1;
-    let currentHighlightIndex = -1;
-    const items = document.getElementsByClassName('subtitle-item');
-    const submitButton = document.getElementById('submitButton');
-    const startTimeInput = document.getElementById('startTime');
-    const endTimeInput = document.getElementById('endTime');
-
-    function handleSearchKey(event) {
-        if (event.key === 'Enter') {
-            navigateNext();
-        } else {
-            highlightSubtitles();
-            autoScrollToFirstMatch();
-        }
-    }
-
-    function highlightSubtitles() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        for (let i = 0; i < items.length; i++) {
-            const contentDiv = items[i].getElementsByClassName('subtitle-content')[0];
-            let content = items[i].dataset.originalContent.toLowerCase();
-            contentDiv.innerHTML = items[i].dataset.originalContent; // Reset to original content
-            if (searchTerm && content.includes(searchTerm)) {
-                const regex = new RegExp(`(${searchTerm})`, 'gi');
-                contentDiv.innerHTML = items[i].dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
-            }
-            // Remove all background classes before applying new ones
-            items[i].classList.remove('bg-green-100', 'dark:bg-green-900', 'bg-red-100', 'dark:bg-red-900', 'bg-gradient-green-red', 'opacity-50', 'cursor-not-allowed');
-            items[i].style.pointerEvents = '';
-            items[i].style.display = 'block';
-            if (i === currentHighlightIndex) items[i].classList.add('bg-yellow-100', 'dark:bg-yellow-700');
-            if (startIndex !== -1 && endIndex !== -1 && startIndex === endIndex && i === startIndex) {
-                items[i].classList.add('bg-gradient-green-red');
-                contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start/End</span>';
-            } else {
-                if (startIndex !== -1 && i === startIndex) {
-                    items[i].classList.add('bg-green-100', 'dark:bg-green-900');
-                    contentDiv.innerHTML += '<span style="color: #22C55E; font-weight: bold; margin-left: 10px;">&lt; Start</span>';
-                }
-                if (endIndex !== -1 && i === endIndex) {
-                    items[i].classList.add('bg-red-100', 'dark:bg-red-900');
-                    contentDiv.innerHTML += '<span style="color: #F87171; font-weight: bold; margin-left: 10px;">&lt; End</span>';
-                }
-            }
-            if (startIndex !== -1) {
-                const startTime = items[startIndex].dataset.startTime;
-                if (i < startIndex && compareTimes(items[i].dataset.startTime, startTime) < 0) {
-                    items[i].classList.add('opacity-50', 'cursor-not-allowed');
-                    items[i].style.pointerEvents = 'none';
-                }
-            }
-        }
-        submitButton.disabled = !(startIndex !== -1 && endIndex !== -1 && startTimeInput && endTimeInput && startTimeInput.value && endTimeInput.value);
-    }
-
-    function selectSubtitle(index) {
-        const item = items[parseInt(index)];
-        if (!item) return;
-        const startTime = item.dataset.startTime;
-        const endTime = item.dataset.endTime;
-        if (!startTime || !endTime) return;
-        if (startIndex === -1) {
-            startIndex = parseInt(index);
-            if (startTimeInput) startTimeInput.value = startTime;
-        } else if (endIndex === -1) {
-            const startTimeCheck = items[startIndex].dataset.startTime;
-            if (compareTimes(startTime, startTimeCheck) >= 0) {
-                endIndex = parseInt(index);
-                if (endTimeInput) endTimeInput.value = endTime;
-            } else {
-                alert("End time cannot be earlier than start time. Please select a later timestamp.");
-                return;
-            }
-        }
-        highlightSubtitles();
-        console.log(`Selected: start=${startTimeInput.value}, end=${endTimeInput.value}`); // Debug log
-    }
-
-    function clearSelections() {
-        startIndex = -1;
-        endIndex = -1;
-        currentHighlightIndex = -1;
-        if (startTimeInput) startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
-        if (endTimeInput) endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
-        submitButton.disabled = true;
-        highlightSubtitles();
-    }
-
-    function validateForm() {
-        if (startIndex === -1 || endIndex === -1) {
-            // Fallback to default values if no selection
-            if (items.length > 0) {
-                if (startTimeInput && !startTimeInput.value) startTimeInput.value = items[0].dataset.startTime;
-                if (endTimeInput && !endTimeInput.value) endTimeInput.value = items[0].dataset.endTime;
-            }
-        }
-        return true; // Allow submission with defaults or selected values
-    }
-
-    function navigateNext() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        if (!searchTerm || items.length === 0) return;
-
-        let newIndex = (currentHighlightIndex + 1) % items.length;
-        let found = false;
-        let checkedAll = false;
-
-        while (!found && !checkedAll) {
-            const content = items[newIndex].dataset.originalContent.toLowerCase();
-            if (content.includes(searchTerm)) {
-                found = true;
-                currentHighlightIndex = newIndex;
-                items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                highlightSubtitles();
-            }
-            newIndex = (newIndex + 1) % items.length;
-            if (newIndex === (currentHighlightIndex + 1) % items.length) checkedAll = true;
-        }
-    }
-
-    function autoScrollToFirstMatch() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        if (!searchTerm || items.length === 0) return;
-
-        for (let i = 0; i < items.length; i++) {
-            const content = items[i].dataset.originalContent.toLowerCase();
-            if (content.includes(searchTerm)) {
-                currentHighlightIndex = i;
-                items[currentHighlightIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                highlightSubtitles();
-                break;
-            }
-        }
-    }
-
-    function compareTimes(time1, time2) {
-        const [h1, m1, s1] = time1.split(':').map(t => parseFloat(t.replace(',', '.')));
-        const [h2, m2, s2] = time2.split(':').map(t => parseFloat(t.replace(',', '.')));
-        const totalSeconds1 = h1 * 3600 + m1 * 60 + s1;
-        const totalSeconds2 = h2 * 3600 + m2 * 60 + s2;
-        return totalSeconds1 - totalSeconds2;
-    }
-
-    // Initialize with default values if subtitles exist
-    window.addEventListener('load', () => {
-        if (items.length > 0 && !startTimeInput.value && !endTimeInput.value) {
-            startTimeInput.value = '{{ subs[0].start_str if subs else '' }}';
-            endTimeInput.value = '{{ subs[0].end_str if subs else '' }}';
-        }
-        highlightSubtitles();
-    });
-</script>
+<script src="{{ url_for('static', filename='js/subtitles.js') }}"></script>
 {% endblock %}

@@ -2,7 +2,7 @@
 {% block title %}Jclipper - Preview{% endblock %}
 {% block content %}
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300 flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
+    <div id="previewContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
         <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
             Main encoding failed. Check FFmpeg output below for details.
         </div>
@@ -11,12 +11,12 @@
         {% set preview_mime = 'video/mp4' if format != 'mp3' else 'audio/mpeg' %}
         {% set is_audio = format == 'mp3' and main_status == 'success' %}
         {% if not is_audio %}
-        <video class="preview-video rounded-lg mx-auto" controls style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+        <video class="preview-video rounded-lg mx-auto" controls crossorigin="anonymous" playsinline style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
             <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type if main_status == 'success' else preview_mime }}">
             Your browser does not support the video tag.
         </video>
         {% else %}
-        <audio class="preview-video" controls style="max-width: 100%;">
+        <audio class="preview-video" controls crossorigin="anonymous" style="max-width: 100%;">
             <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
             Your browser does not support the audio tag.
         </audio>
@@ -24,42 +24,45 @@
         <div id="video-error" style="display: none; color: red; text-align: center;">
             Failed to load media. Try downloading or using a different format.
         </div>
-        {% if not from_history %}
-        <div class="mt-4 w-full flex items-center space-x-2">
-            <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors duration-300" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')">
-                Toggle FFmpeg Output
+        <div class="mt-4 flex justify-center space-x-4">
+            <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Download">
+                <i class="fas fa-download"></i>
+            </button>
+            {% if s3_enabled %}
+            <button id="share-btn" onclick="shareVideo()" class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Share">
+                <i class="fas fa-share-alt"></i>
+            </button>
+            {% else %}
+            <button id="share-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center" disabled title="Sharing is disabled because S3 is not configured">
+                <i class="fas fa-share-alt"></i>
+            </button>
+            {% endif %}
+            {% if not from_history %}
+            <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors flex items-center" title="Modify">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center" title="Cancel">
+                <i class="fas fa-times-circle"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% if not from_history %}
+    <div id="ffmpegContainer" class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto mt-4 min-h-[100px] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center">
+        <div class="w-full flex items-center space-x-2">
+            <button class="flex-grow bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors" onclick="document.getElementById('ffmpeg-output').classList.toggle('hidden')" title="Toggle FFmpeg Output">
+                <i class="fas fa-terminal"></i>
             </button>
             <div id="status-icon" class="icon-container bg-gray-200 dark:bg-gray-700">
                 <i class="fas fa-sync-alt fa-spin text-blue-500 {% if main_status != 'encoding' %}hidden{% endif %}" title="Encoding in progress"></i>
                 <i class="fas fa-check-circle text-green-500 {% if main_status != 'success' %}hidden{% endif %}" title="Encoding complete"></i>
             </div>
         </div>
-        <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg w-full">
             <pre class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
         </div>
-        {% endif %}
-        <div class="mt-4 flex justify-center space-x-4">
-            <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                <i class="fas fa-download"></i>
-                <span>Download</span>
-            </button>
-            {% if s3_enabled %}
-            <button id="share-btn" onclick="shareVideo()" class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors duration-300 flex items-center space-x-2 {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %}>
-                <i class="fas fa-share-alt"></i>
-                <span>Share</span>
-            </button>
-            {% else %}
-            <button id="share-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" disabled title="Sharing is disabled because S3 is not configured">
-                <i class="fas fa-share-alt"></i>
-                <span>Share</span>
-            </button>
-            {% endif %}
-            {% if not from_history %}
-            <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors duration-300 flex items-center space-x-2">Modify</a>
-            <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300">Cancel</a>
-            {% endif %}
-        </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 {% block scripts %}
@@ -104,7 +107,6 @@
                             console.log('Shared successfully');
                         }).catch(err => {
                             console.error('Share failed:', err);
-                            // Fallback to clipboard
                             navigator.clipboard.writeText(data.url).then(() => {
                                 alert('Share not supported. Video link copied to clipboard!');
                             }).catch(err => {
@@ -113,7 +115,6 @@
                             });
                         });
                     } else {
-                        // Fallback for non-supported browsers
                         navigator.clipboard.writeText(data.url).then(() => {
                             alert('Share not supported. Video link copied to clipboard!');
                         }).catch(err => {
@@ -141,20 +142,16 @@
             .then(data => {
                 const status = data.status;
                 const output = data.ffmpeg_output;
-                // Update failure msg
                 const failureDiv = document.getElementById('failure-msg');
                 failureDiv.style.display = (status === 'failure') ? 'block' : 'none';
-                // Update ffmpeg output
                 const pre = document.querySelector('#ffmpeg-output pre');
                 pre.textContent = output || 'FFmpeg output not available yet.';
-                // Update pulse
                 const container = document.getElementById('previewContainer');
                 if (status === 'encoding') {
                     container.classList.add('pulse-animation');
                 } else {
                     container.classList.remove('pulse-animation');
                 }
-                // Update buttons
                 const downloadBtn = document.getElementById('download-btn');
                 const shareBtn = document.getElementById('share-btn');
                 if (status === 'success') {
@@ -172,7 +169,6 @@
                     shareBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-400');
                     shareBtn.setAttribute('disabled', 'disabled');
                 }
-                // Update status icon
                 const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
                 const successIcon = document.querySelector('#status-icon .fa-check-circle');
                 if (status === 'encoding') {
@@ -185,7 +181,6 @@
                     refreshIcon.classList.add('hidden');
                     successIcon.classList.add('hidden');
                 }
-                // Continue polling if encoding
                 if (status === 'encoding') {
                     setTimeout(updateStatus, 5000);
                 }

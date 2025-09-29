@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
-{% block title %}Jclipper - Output{% endblock %}
+{% block title %}Jclipper - History{% endblock %}
 {% block content %}
-<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+<nav class="bg-gray-100 py-4 dark:bg-gray-900">
     <div class="container mx-auto px-4">
         <div class="flex justify-center">
-            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search history..." onkeyup="filterHistory()">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors" placeholder="Search history..." onkeyup="filterHistory()">
         </div>
     </div>
 </nav>
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700">
         {% if file_data %}
             <ul class="space-y-2">
                 {% for full_path, basename in file_data %}
@@ -41,7 +41,7 @@
                     {% set movie_name = movie_parts | join(' ') | default('Unnamed Clip', true) %}
                     {% set timestamp = timestamp_start ~ ' - ' ~ timestamp_end if timestamp_start and timestamp_end else '' %}
                     {% set filetype = basename | splitext | last | replace('.', '') | upper %}
-                    <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors duration-300 dark:hover:bg-gray-700 flex items-center justify-between w-full min-w-[250px]" style="display: flex; justify-content: space-between;">
+                    <li class="p-3 rounded-md hover:bg-gray-200 cursor-pointer dark:hover:bg-gray-700 flex items-center justify-between w-full min-w-[250px]" style="display: flex; justify-content: space-between;">
                         <div class="flex flex-col pr-4 w-full">
                             <a href="{{ url_for('preview', history_file=full_path) }}" class="text-gray-900 dark:text-gray-200 font-semibold mb-2">{{ movie_name }}</a>
                             <div class="flex flex-wrap gap-1">
@@ -61,15 +61,15 @@
                         </div>
                         <div class="flex space-x-2">
                             {% if s3_enabled %}
-                            <div class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors duration-300 flex items-center space-x-2">
-                                <i class="fas fa-share-alt cursor-pointer" onclick="shareFile('{{ full_path }}', '{{ basename }}')"></i>
+                            <div class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center space-x-2">
+                                <i class="fas fa-share-alt cursor-pointer" onclick="shareFile('{{ full_path | replace('/output/', '') }}', '{{ basename }}')"></i>
                             </div>
                             {% else %}
                             <div class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" title="Sharing is disabled because S3 is not configured">
                                 <i class="fas fa-share-alt"></i>
                             </div>
                             {% endif %}
-                            <div class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300 flex items-center space-x-2">
+                            <div class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center space-x-2">
                                 <i class="fas fa-trash cursor-pointer" onclick="deleteFile('{{ full_path }}')"></i>
                             </div>
                         </div>
@@ -77,11 +77,11 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center transition-colors duration-300">No history available</div>
+            <div class="text-red-900 text-base opacity-100 bg-red-200 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded text-center">No history available</div>
         {% endif %}
     </div>
     <div class="flex justify-center mt-4">
-        <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors duration-300" onclick="clearAllClips()">Clear All Clips</button>
+        <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors" onclick="clearAllClips()">Clear All Clips</button>
     </div>
 </div>
 {% endblock %}
@@ -99,6 +99,7 @@
     }
 
     function deleteFile(filePath) {
+        console.log('Deleting file:', filePath);
         fetch('/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -106,6 +107,7 @@
         })
         .then(response => response.json())
         .then(data => {
+            console.log('Delete response:', data);
             if (data.success) {
                 const item = document.querySelector(`li i[onclick="deleteFile('${filePath}')"]`).parentElement.parentElement.parentElement;
                 if (item) item.remove();
@@ -114,7 +116,7 @@
             }
         })
         .catch(error => {
-            console.error('Error during delete fetch: ' + error);
+            console.error('Error during delete fetch:', error);
             alert('An error occurred while deleting the file.');
         });
     }
@@ -127,6 +129,7 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Clear all response:', data);
                 if (data.success) {
                     location.reload();
                 } else {
@@ -135,57 +138,64 @@
                 }
             })
             .catch(error => {
-                console.error('Error during clear all fetch: ' + error);
+                console.error('Error during clear all fetch:', error);
                 alert('An error occurred while clearing all clips.');
             });
         }
     }
 
     function shareFile(filePath, basename) {
-        const parts = basename.split('_');
-        const movieName = parts[0].replace(/_/g, ' ') || 'Video Clip';
-        const text = "Check out this video clip from Jclipper!";
-        {% if s3_enabled %}
-        fetch('/upload_s3?file=' + encodeURIComponent(filePath))
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    if (navigator.share) {
-                        navigator.share({
-                            title: movieName,
-                            text: text,
-                            url: data.url
-                        }).then(() => {
-                            console.log('Shared successfully');
-                        }).catch(err => {
-                            console.error('Share failed:', err);
-                            navigator.clipboard.writeText(data.url).then(() => {
-                                alert('Share not supported. Video link copied to clipboard!');
-                            }).catch(err => {
-                                console.error('Failed to copy:', err);
-                                alert('Share not supported and failed to copy video link.');
-                            });
-                        });
-                    } else {
+    const parts = basename.split('_');
+    let movieName = '';
+    for (let i = 0; i < parts.length; i++) {
+        if (/\d{2}-\d{2}-\d{2}\.\d{3}/.test(parts[i])) {
+            break;
+        }
+        movieName += (i > 0 ? ' ' : '') + parts[i].replace(/_/g, ' ');
+    }
+    movieName = movieName || 'Video Clip';
+    const text = "Check out this video clip from Jclipper!";
+    {% if s3_enabled %}
+    fetch('/upload_s3?file=' + encodeURIComponent(filePath))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (navigator.share) {
+                    navigator.share({
+                        title: movieName,
+                        text: text,
+                        url: data.url
+                    }).then(() => {
+                        console.log('Shared successfully');
+                    }).catch(err => {
+                        console.error('Share failed:', err);
                         navigator.clipboard.writeText(data.url).then(() => {
                             alert('Share not supported. Video link copied to clipboard!');
                         }).catch(err => {
                             console.error('Failed to copy:', err);
                             alert('Share not supported and failed to copy video link.');
                         });
-                    }
+                    });
                 } else {
-                    alert('S3 upload failed: ' + data.message);
+                    navigator.clipboard.writeText(data.url).then(() => {
+                        alert('Share not supported. Video link copied to clipboard!');
+                    }).catch(err => {
+                        console.error('Failed to copy:', err);
+                        alert('Share not supported and failed to copy video link.');
+                    });
                 }
-            })
-            .catch(error => {
-                console.error('S3 upload error:', error);
-                alert('S3 upload failed.');
-            });
-        {% else %}
-        alert('Sharing is not available because S3 is not configured.');
-        {% endif %}
-    }
+            } else {
+                alert('S3 upload failed: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('S3 upload error:', error);
+            alert('S3 upload failed.');
+        });
+    {% else %}
+    alert('Sharing is not available because S3 is not configured.');
+    {% endif %}
+}
 
     window.addEventListener('load', () => {
         filterHistory();

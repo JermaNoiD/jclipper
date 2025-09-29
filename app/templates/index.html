@@ -1,24 +1,24 @@
 ﻿{% extends 'base.html' %}
 {% block title %}Jclipper{% endblock %}
 {% block content %}
-<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors duration-300">
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
     <div class="container mx-auto px-4">
         <div class="flex justify-center">
-            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300" placeholder="Search movies..." onkeyup="filterMovies()">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400" placeholder="Search movies..." onkeyup="filterMovies()">
         </div>
     </div>
 </nav>
 <div class="container mx-auto mt-8 px-4 flex-grow">
-    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors duration-300">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
         <ul class="movie-list space-y-2" id="movieList">
             {% for movie in movies %}
             {% set movie_path = movie.name %}
             {% set movie_name = movie_path | basename | splitext | first %}
             {% set root_folder = movie_path | split('/') | first %}
-            <li class="movie-list-item flex items-center p-3 rounded-md hover:bg-gray-200 transition-colors duration-300 dark:hover:bg-gray-700 {% if not movie.has_srt %}cursor-not-allowed opacity-50{% endif %}" data-name="{{ movie_name|lower }}">
-                <span class="movie-tag text-gray-900 dark:text-gray-200 text-sm bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded mr-2 transition-colors duration-300">{{ root_folder }}</span>
-                <a href="{% if movie.has_srt %}{{ url_for('subtitles', movie=movie.video) }}{% else %}#{% endif %}" class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors duration-300">{{ movie_name }}</a>
-                {% if not movie.has_srt %}<span class="no-srt-text text-red-900 dark:text-red-300 text-sm bg-red-200 dark:bg-red-900 px-2 py-1 rounded transition-colors duration-300">&lt; No subtitle file available</span>{% endif %}
+            <li class="movie-list-item flex items-center p-3 rounded-md hover:bg-gray-200 transition-colors dark:hover:bg-gray-700 {% if not movie.has_srt %}cursor-not-allowed opacity-50{% endif %}" data-name="{{ (movie_name | clean_movie_name) | lower }}">
+                <span class="movie-tag text-gray-900 dark:text-gray-200 text-sm bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded mr-2 transition-colors">{{ root_folder }}</span>
+                <a href="{% if movie.has_srt %}{{ url_for('subtitles', movie=movie.video) }}{% else %}#{% endif %}" class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors">{{ movie_name | clean_movie_name }}</a>
+                {% if not movie.has_srt %}<span class="no-srt-text text-red-900 dark:text-red-300 text-sm bg-red-200 dark:bg-red-900 px-2 py-1 rounded transition-colors">&lt; No subtitle file available</span>{% endif %}
             </li>
             {% endfor %}
         </ul>
