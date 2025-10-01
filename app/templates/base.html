@@ -59,36 +59,36 @@
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
         }
-        .no-scrollbar::-webkit-scrollbar { 
-            display: none; 
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
         }
-        .no-scrollbar { 
-            -ms-overflow-style: none; 
-            scrollbar-width: none; 
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
-        .pulse-animation { 
-            animation: pulse 1.5s infinite; 
+        .pulse-animation {
+            animation: pulse 1.5s infinite;
         }
-        @keyframes pulse { 
-            0% { background-color: #f3f4f6; } 
-            50% { background-color: #d1d5db; } 
-            100% { background-color: #f3f4f6; } 
+        @keyframes pulse {
+            0% { background-color: #f3f4f6; }
+            50% { background-color: #d1d5db; }
+            100% { background-color: #f3f4f6; }
         }
-        .dark .pulse-animation { 
-            animation: pulse-dark 1.5s infinite; 
+        .dark .pulse-animation {
+            animation: pulse-dark 1.5s infinite;
         }
-        @keyframes pulse-dark { 
-            0% { background-color: #1f2937; } 
-            50% { background-color: #374151; } 
-            100% { background-color: #1f2937; } 
+        @keyframes pulse-dark {
+            0% { background-color: #1f2937; }
+            50% { background-color: #374151; }
+            100% { background-color: #1f2937; }
         }
-        .icon-container { 
-            opacity: 0.8; 
-            display: inline-flex; 
-            align-items: center; 
-            justify-content: center; 
-            padding: 0.5rem; 
-            border-radius: 0.375rem; 
+        .icon-container {
+            opacity: 0.8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
         }
         .highlight {
             background-color: #FBBF24; /* Tailwind yellow-400 as fallback */
@@ -126,6 +126,11 @@
             transition-property: color, background-color;
             transition-duration: 150ms;
         }
+        /* Ensure hamburger icon is consistent */
+        .hamburger-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -138,14 +143,12 @@
         </div>
         <div class="flex items-center space-x-4">
             <button class="md:hidden text-gray-900 focus:outline-none dark:text-white transition-colors" onclick="document.getElementById('navcol-5').classList.toggle('hidden')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16M4 12h16M4 18h16"></path>
-                </svg>
+                <i class="fas fa-bars hamburger-icon"></i>
             </button>
             <div id="navcol-5" class="hidden md:flex md:items-center md:space-x-4">
                 <ul class="flex flex-col md:flex-row md:space-x-4">
-                    <li><a href="/" class="text-gray-900 hover:text-gray-700 dark:text-gray-200 dark:hover:text-white font-medium transition-colors">Movie Clip</a></li>
-                    <li><a href="/history" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white font-medium transition-colors">History</a></li>
+                    <li><a href="/" class="{% if request.path != '/history' %}text-gray-900 dark:text-gray-200 font-semibold{% else %}text-gray-500 dark:text-gray-400 font-medium{% endif %} hover:text-gray-700 dark:hover:text-white transition-colors">Movie Clipper</a></li>
+                    <li><a href="/history" class="{% if request.path == '/history' %}text-gray-900 dark:text-gray-200 font-semibold{% else %}text-gray-500 dark:text-gray-400 font-medium{% endif %} hover:text-gray-700 dark:hover:text-white transition-colors">History</a></li>
                 </ul>
             </div>
             <div class="flex items-center">
