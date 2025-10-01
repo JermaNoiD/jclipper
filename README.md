@@ -56,7 +56,10 @@ Click proceed to continue to the output settings page.
 #### Output Settings
 If you need to add some seconds of time flanking the clip to capture a certain moment outside the .srt timestamp, this can be done by adding some seconds to the padding field. 
 Scale factor allows you to scale the resolution of the output clip down from the native file resolution.
-Format allows you to select mp4,mkv,avi for audio/video or mp3 for just audio.
+Format allows you to select:
+- mp4,mkv,avi for audio/video
+- gif,avif for video only
+- mp3 for audio only.
 Click Generate to create the clip. For 4k files this may take a minute depending on how large the clip is, but a quick 720p preview clip will be generated
 
 #### Preview Page
