@@ -159,19 +159,6 @@ def get_resolution(video):
 @app.before_request
 def make_session_permanent():
     session.permanent = True
-    # Remove the following block to prevent spurious clears:
-    # if not request.cookies.get('session'):
-    #     app.logger.info(f"New session detected, clearing TEMP_DIR: {TEMP_DIR}")
-    #     for item in os.listdir(TEMP_DIR):
-    #         item_path = os.path.join(TEMP_DIR, item)
-    #         try:
-    #             if os.path.isdir(item_path):
-    #                 shutil.rmtree(item_path)
-    #             else:
-    #                 os.remove(item_path)
-    #             app.logger.info(f"Removed {item} from TEMP_DIR on new session")
-    #         except Exception as e:
-    #             app.logger.error(f"Failed to remove {item} from TEMP_DIR: {str(e)}")
 
 @app.route('/', methods=['GET'])
 def index():
@@ -236,7 +223,7 @@ def output():
     res = video_info['resolution']
     app.logger.info(f"Using resolution for {video}: {res[0]}x{res[1]}")
     default_format = session.get('format', 'mp4')
-    available_formats = ['mp4', 'mkv', 'avi', 'mp3']
+    available_formats = ['mp4', 'mkv', 'avi', 'gif', 'avif', 'mp3']
     source_format = os.path.splitext(video)[1][1:].lower()
     audio_streams = video_info['audio_streams']
     
@@ -284,10 +271,6 @@ def output():
                           audio_index=audio_index,
                           pretty_movie_name=pretty_movie_name)
 
-    movie_base = os.path.splitext(os.path.basename(video))[0]
-    pretty_movie_name = clean_movie_name(movie_base)
-    return render_template('output.html', ..., pretty_movie_name=pretty_movie_name)
-
 def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index):
     with app.app_context():
         encoding_file = os.path.join(temp_job_dir, 'encoding')
@@ -295,26 +278,31 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
         success_file = os.path.join(temp_job_dir, 'success')
         with open(encoding_file, 'w') as f:
             pass
-        scale_filter = f'scale={scaled_width}:{scaled_height}:flags=lanczos' if scale_factor != 1.0 else None
-        video_codec = 'libx264' if format in ['mp4', 'mkv'] else 'mpeg4'
-        audio_codec = 'aac' if format in ['mp4', 'mkv'] else 'libmp3lame'
+        scale_filter = f'scale={scaled_width}:{scaled_height}:flags=lanczos'
+        base_cmd = ['ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration)]
         if format == 'mp3':
-            main_cmd = [
-                'ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration),
+            main_cmd = base_cmd + [
                 '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', '192k', '-ac', '2',
                 '-threads', '4', output_file
             ]
+        elif format in ['gif', 'avif']:
+            video_codec = 'gif' if format == 'gif' else 'libaom-av1'
+            extra_flags = ['-loop', '0'] if format == 'gif' else ['-strict', 'experimental', '-cpu-used', '4']
+            main_cmd = base_cmd + [
+                '-map', '0:v:0?', '-map', '-0:a?', '-map', '-0:s?', '-c:v', video_codec, '-vf', scale_filter
+            ] + extra_flags + [output_file]
         else:
-            main_cmd = [
-                'ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration),
+            video_codec = 'libx264' if format in ['mp4', 'mkv'] else 'mpeg4'
+            audio_codec = 'aac' if format in ['mp4', 'mkv'] else 'libmp3lame'
+            main_cmd = base_cmd + [
                 '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-preset', 'veryfast', '-c:a', audio_codec, '-b:a', '192k', '-ac', '2',
-                '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p', output_file
+                '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p'
             ]
-            if scale_filter:
-                main_cmd.insert(-1, '-vf')
-                main_cmd.insert(-1, scale_filter)
+            if scale_factor != 1.0:
+                main_cmd += ['-vf', scale_filter]
             if format == 'mp4':
                 main_cmd += ['-movflags', '+faststart']
+            main_cmd += [output_file]
         if FFMPEG_LOG_ENABLED:
             app.logger.info(f"Running FFmpeg for main: {' '.join(main_cmd)}")
         process = subprocess.Popen(main_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
@@ -371,9 +359,7 @@ def generate():
     padding = float(request.form.get('padding', 0))
     scale_factor = float(request.form.get('scale_factor', 1.0))
     audio_index = request.form.get('audio_index', '0')
-    res_str = request.form.get('resolution', '1920x1080')
-    scaled_width, scaled_height = map(int, res_str.split('x'))
-    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}, resolution={res_str}")
+    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}")
     if not all([start_str, end_str, video]):
         app.logger.warning(f"Missing required params in generate: start={start_str}, end={end_str}, video={video}")
         return redirect(url_for('output'))
@@ -395,6 +381,8 @@ def generate():
     end_time = end_str.replace(':', '-').replace(',', '.')
     res = get_resolution(video)
     original_width, original_height = res
+    scaled_width = int(original_width * scale_factor)
+    scaled_height = int(original_height * scale_factor)
     scaled_width = scaled_width if scaled_width % 2 == 0 else scaled_width - 1
     scaled_height = scaled_height if scaled_height % 2 == 0 else scaled_height - 1
     padding_str = f"p{padding}" if padding > 0 else ""
@@ -420,14 +408,32 @@ def generate():
     app.logger.info(f"Preserved session in generate: {session}")
     
     # Generate preview
-    preview_filename = "preview.mp4"
+    preview_filename = f"preview.{format}"
     preview_file = os.path.join(temp_job_dir, preview_filename)
-    preview_scale_filter = 'scale=1280:-2:flags=lanczos'
-    preview_cmd = [
-        'ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration),
-        '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
-        '-vf', preview_scale_filter, '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-threads', '4', '-r', '23.98', preview_file
-    ]
+    base_cmd = ['ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration)]
+    if format == 'mp3':
+        preview_cmd = base_cmd + [
+            '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', '128k', '-ac', '2',
+            '-threads', '4', preview_file
+        ]
+    elif format in ['gif', 'avif']:
+        preview_scale_filter = 'scale=1280:720:flags=lanczos'
+        video_codec = 'gif' if format == 'gif' else 'libaom-av1'
+        extra_flags = ['-loop', '0'] if format == 'gif' else ['-strict', 'experimental', '-cpu-used', '8', '-usage', 'realtime']
+        preview_cmd = base_cmd + [
+            '-map', '0:v:0?', '-map', '-0:a?', '-map', '-0:s?', '-c:v', video_codec
+        ] + ['-vf', preview_scale_filter] + extra_flags + [preview_file]
+    else:
+        preview_scale_filter = 'scale=1280:720:flags=lanczos'
+        video_codec = 'libx264' if format in ['mp4', 'mkv'] else 'mpeg4'
+        audio_codec = 'aac' if format in ['mp4', 'mkv'] else 'libmp3lame'
+        preview_cmd = base_cmd + [
+            '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-preset', 'ultrafast', '-crf', '28', '-c:a', audio_codec, '-b:a', '128k', '-ac', '2',
+            '-vf', preview_scale_filter, '-pix_fmt', 'yuv420p', '-threads', '4', '-r', '23.98'
+        ]
+        if format == 'mp4':
+            preview_cmd += ['-movflags', '+faststart']
+        preview_cmd += [preview_file]
     if FFMPEG_LOG_ENABLED:
         app.logger.info(f"Running FFmpeg for preview: {' '.join(preview_cmd)}")
     process = subprocess.run(preview_cmd, capture_output=True, text=True)
@@ -544,19 +550,20 @@ def preview():
     s3_enabled = all([os.getenv('S3_ENDPOINT'), os.getenv('S3_REGION'), os.getenv('S3_BUCKET'), os.getenv('S3_KEY'), os.getenv('S3_SECRET')])
     app.logger.info(f"Preview route: s3_enabled={s3_enabled}")
     return render_template('preview.html', file=preview, output=output, format=format, start=start if not from_history else None, end=end if not from_history else None, video=video if not from_history else None, encoding_done=encoding_done, main_status=main_status, main_ffmpeg_output=main_ffmpeg_output, s3_enabled=s3_enabled, movie_name=movie_name, from_history=from_history)
+
 @app.route('/status')
 def get_status():
     temp_job_dir = session.get('temp_job_dir')
     if not temp_job_dir:
         return jsonify({'status': 'error', 'message': 'No job directory'})
     
-    success_path = os.path.join(temp_job_dir, 'success')  # success indicator file
+    success_path = os.path.join(temp_job_dir, 'success')
     log_path = os.path.join(temp_job_dir, 'log.txt')
     
     if os.path.exists(success_path):
         status = 'success'
     else:
-        status = 'encoding'  # Add 'failed' logic if you have a .failed file
+        status = 'encoding'
     
     try:
         with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -596,11 +603,10 @@ def upload_s3():
     if not output or not os.path.exists(output):
         return jsonify({'success': False, 'message': 'No file to upload'})
     format = session.get('format', 'mp4')
-    mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' if format == 'mp3' else 'application/octet-stream'
-    link_format = os.getenv('S3_LINK_FORMAT', 'presigned').lower()  # Default to presigned
+    mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'image/gif' if format == 'gif' else 'image/avif' if format == 'avif' else 'audio/mpeg' if format == 'mp3' else 'application/octet-stream'
+    link_format = os.getenv('S3_LINK_FORMAT', 'presigned').lower()
     try:
         s3 = boto3.client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET, region_name=S3_REGION)
-        # Sanitize movie title up to timestamp
         base_filename = os.path.splitext(os.path.basename(output))[0]
         parts = base_filename.split('_')
         movie_parts = []
@@ -614,23 +620,20 @@ def upload_s3():
             else:
                 movie_parts.append(part)
         movie_title = '_'.join(part for part in movie_parts if part).replace('(', '_').replace(')', '_').replace(' ', '_').replace(',', '_').strip('_')
-        time_res = '_'.join(time_res_parts)  # e.g., "01-01-59.936_to_01-02-15.318_1920x1080"
+        time_res = '_'.join(time_res_parts)
         movie_folder = f"{movie_title}/"
-        video_filename = f"video_{time_res}.{format}"  # e.g., "video_01-01-59.936_to_01-02-15.318_1920x1080.mp4"
+        video_filename = f"video_{time_res}.{format}"
         video_key = f"{movie_folder}{video_filename}"
         s3.upload_file(output, S3_BUCKET, video_key, ExtraArgs={'ContentType': mime_type})
         
-        # Generate video URL based on S3_LINK_FORMAT
         if link_format == 'basic':
             video_url = f"{S3_ENDPOINT}/{S3_BUCKET}/{video_key}"
         else:
             video_url = s3.generate_presigned_url('get_object', Params={'Bucket': S3_BUCKET, 'Key': video_key}, ExpiresIn=604800)
         
-        # Verify Content-Type header
         video_response = s3.head_object(Bucket=S3_BUCKET, Key=video_key)
         app.logger.info(f"S3 upload successful, Video URL: {video_url}, Content-Type: {video_response.get('ContentType', 'N/A')}, Link Format: {link_format}")
         
-        # Return video URL for clipboard
         return jsonify({'success': True, 'url': video_url})
     except Exception as e:
         app.logger.error(f"S3 upload failed: {str(e)}")
@@ -647,7 +650,6 @@ def cancel_encoding():
         except Exception as e:
             app.logger.error(f"Failed to cancel PID {pid}: {str(e)}")
     
-    # Remove preview file
     preview = session.get('preview')
     if preview and os.path.exists(preview):
         try:
@@ -656,7 +658,6 @@ def cancel_encoding():
         except Exception as e:
             app.logger.error(f"Failed to remove preview file on cancel {preview}: {str(e)}")
     
-    # Remove output file
     output = session.get('output')
     if output and os.path.exists(output):
         try:
@@ -665,7 +666,6 @@ def cancel_encoding():
         except Exception as e:
             app.logger.error(f"Failed to remove output file on cancel {output}: {str(e)}")
     
-    # Remove temp job directory
     temp_job_dir = session.get('temp_job_dir')
     if temp_job_dir and os.path.exists(temp_job_dir):
         try:
@@ -674,17 +674,14 @@ def cancel_encoding():
         except Exception as e:
             app.logger.error(f"Failed to remove temp job dir on cancel {temp_job_dir}: {str(e)}")
     
-    # Update job_dirs in session
     if output:
         session['job_dirs'] = session.get('job_dirs', {})
         session['job_dirs'].pop(output, None)
     
-    # Preserve movie, start, and end for Modify
     movie = session.get('movie')
     start = session.get('start')
     end = session.get('end')
     
-    # Clear session variables except for movie, start, and end
     session.pop('preview', None)
     session.pop('output', None)
     session.pop('format', None)
@@ -697,21 +694,7 @@ def cancel_encoding():
     
     next_page = request.args.get('next', 'index')
     if next_page == 'output' and movie and start and end:
-        # Redirect to output with preserved parameters
         return redirect(url_for('output', video=movie, start=start, end=end))
-    return redirect(url_for(next_page))
-    
-    # Clear session variables
-    session.pop('preview', None)
-    session.pop('output', None)
-    session.pop('format', None)
-    session.pop('padding', None)
-    session.pop('scale_factor', None)
-    session.pop('temp_job_dir', None)
-    session.pop('audio_index', None)
-    session.modified = True
-    
-    next_page = request.args.get('next', 'index')
     return redirect(url_for(next_page))
 
 @app.route('/resolution')
@@ -812,6 +795,8 @@ def serve():
             'video/mp4' if file.endswith('.mp4') else
             'video/x-matroska' if file.endswith('.mkv') else
             'video/x-msvideo' if file.endswith('.avi') else
+            'image/gif' if file.endswith('.gif') else
+            'image/avif' if file.endswith('.avif') else
             'audio/mpeg' if file.endswith('.mp3') else
             'application/octet-stream'
         )
@@ -836,31 +821,27 @@ def s3_proxy(filename):
     if not S3_BUCKET or not S3_ENDPOINT:
         return 'S3 not configured', 500
     try:
-        # Construct S3 URL
         s3_url = f"{S3_ENDPOINT}/{S3_BUCKET}/{filename}"
-        # Fetch file from S3
         s3 = boto3.client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET, region_name=S3_REGION)
         response = s3.get_object(Bucket=S3_BUCKET, Key=filename)
         content = response['Body'].read()
         
-        # Determine MIME type
         mime_type = (
             'video/mp4' if filename.endswith('.mp4') else
             'video/x-matroska' if filename.endswith('.mkv') else
             'video/x-msvideo' if filename.endswith('.avi') else
+            'image/gif' if filename.endswith('.gif') else
+            'image/avif' if filename.endswith('.avif') else
             'audio/mpeg' if filename.endswith('.mp3') else
             'application/octet-stream'
         )
         
-        # Extract metadata from filename (e.g., "Movie_00-01-02_to_00-03-04_1920x1080.mp4")
         parts = filename.rsplit('.', 1)[0].split('_')
         title = parts[0].replace('_', ' ') if parts else 'Video Clip'
         description = f"{title} - Clip from {parts[1] if len(parts) > 1 else 'movie'}" if parts else 'Video Clip'
         
-        # Generate thumbnail URL (use FFmpeg to extract a frame if needed, or a placeholder)
-        thumbnail_url = f"{request.url_root}s3-proxy-thumbnail/{filename}"  # Optional: Add a thumbnail proxy below
+        thumbnail_url = f"{request.url_root}s3-proxy-thumbnail/{filename}"
         
-        # Return with OG headers
         return Response(
             content,
             mimetype=mime_type,
@@ -869,7 +850,7 @@ def s3_proxy(filename):
                 'og:description': description,
                 'og:type': 'video.other',
                 'og:video': s3_url,
-                'og:image': thumbnail_url,  # Requires a thumbnail image URL
+                'og:image': thumbnail_url,
                 'Cache-Control': 'no-cache'
             }
         )

@@ -8,19 +8,22 @@
             Main encoding failed. Check FFmpeg output below for details.
         </div>
         {% set file_to_serve = output if main_status == 'success' else file %}
-        {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'audio/mpeg' %}
-        {% set preview_mime = 'video/mp4' if format != 'mp3' else 'audio/mpeg' %}
-        {% set is_audio = format == 'mp3' and main_status == 'success' %}
-        {% if not is_audio %}
+        {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'image/gif' if format == 'gif' else 'image/avif' if format == 'avif' else 'audio/mpeg' if format == 'mp3' else '' %}
+        {% set is_audio = format == 'mp3' %}
+        {% set is_image = format in ['gif', 'avif'] %}
+        {% set is_video = not is_audio and not is_image %}
+        {% if is_video %}
         <video class="preview-video rounded-lg mx-auto" controls crossorigin="anonymous" playsinline style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
-            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type if main_status == 'success' else preview_mime }}">
+            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
             Your browser does not support the video tag.
         </video>
-        {% else %}
+        {% elif is_audio %}
         <audio class="preview-video" controls crossorigin="anonymous" style="max-width: 100%;">
             <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
             Your browser does not support the audio tag.
         </audio>
+        {% elif is_image %}
+        <img src="{{ url_for('serve', file=file_to_serve) }}" class="preview-video rounded-lg mx-auto" style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
         {% endif %}
         <div id="video-error" style="display: none; color: red; text-align: center;">
             Failed to load media. Try downloading or using a different format.
