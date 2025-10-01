@@ -60,6 +60,7 @@ Format allows you to select:
 - mp4,mkv,avi for audio/video
 - gif,avif for video only
 - mp3 for audio only.
+
 Click Generate to create the clip. For 4k files this may take a minute depending on how large the clip is, but a quick 720p preview clip will be generated
 
 #### Preview Page
