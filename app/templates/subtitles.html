@@ -18,7 +18,7 @@
             <input type="hidden" name="video" value="{{ movie }}">
             <ul class="space-y-2">
                 {% for sub in subs %}
-                <li class="subtitle-item p-3 rounded-md hover:bg-gray-200 cursor-pointer transition-colors dark:hover:bg-gray-700 flex" onclick="toggleSelection(this)" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}" data-original-content="{{ sub.content }}">
+                <li class="subtitle-item p-1 rounded-md hover:bg-gray-200 cursor-pointer transition-colors dark:hover:bg-gray-700 flex" onclick="toggleSelection(this)" data-start-time="{{ sub.start_str }}" data-end-time="{{ sub.end_str }}" data-original-content="{{ sub.content }}">
                     <div class="w-1/4 flex flex-col justify-between text-gray-500 dark:text-gray-400 text-xs">
                         <p>{{ sub.start_str }}</p>
                         <p>{{ sub.end_str }}</p>
@@ -27,6 +27,14 @@
                         {{ sub.content }}
                     </div>
                 </li>
+                {% if not loop.last %}
+                <li class="separator-item p-1 rounded-md hover:bg-gray-200 cursor-pointer transition-colors dark:hover:bg-gray-700 flex items-center w-full" onclick="toggleSelection(this)" data-start-time="{{ sub.end_str }}" data-end-time="{{ subs[loop.index].start_str }}">
+                    <div class="flex justify-center w-full">
+                        <hr class="flex-1 border-t border-gray-300 dark:border-gray-600">
+                    </div>
+                    <div class="separator-content flex-1 pl-4 text-gray-900 dark:text-gray-200"></div>
+                </li>
+                {% endif %}
                 {% endfor %}
             </ul>
         </form>

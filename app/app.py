@@ -278,7 +278,7 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
         success_file = os.path.join(temp_job_dir, 'success')
         with open(encoding_file, 'w') as f:
             pass
-        scale_filter = f'scale={scaled_width}:{scaled_height}:flags=lanczos'
+        scale_filter = f'scale={scaled_width}:{scaled_height}:flags=lanczos' if scale_factor != 1.0 else None
         base_cmd = ['ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000', '-ss', str(start_sec), '-i', video, '-t', str(duration)]
         if format == 'mp3':
             main_cmd = base_cmd + [
@@ -289,8 +289,11 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
             video_codec = 'gif' if format == 'gif' else 'libaom-av1'
             extra_flags = ['-loop', '0'] if format == 'gif' else ['-strict', 'experimental', '-cpu-used', '4']
             main_cmd = base_cmd + [
-                '-map', '0:v:0?', '-map', '-0:a?', '-map', '-0:s?', '-c:v', video_codec, '-vf', scale_filter
-            ] + extra_flags + [output_file]
+                '-map', '0:v:0?', '-map', '-0:a?', '-map', '-0:s?', '-c:v', video_codec
+            ]
+            if scale_filter:
+                main_cmd += ['-vf', scale_filter]
+            main_cmd += extra_flags + [output_file]
         else:
             video_codec = 'libx264' if format in ['mp4', 'mkv'] else 'mpeg4'
             audio_codec = 'aac' if format in ['mp4', 'mkv'] else 'libmp3lame'
@@ -298,7 +301,7 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
                 '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-preset', 'veryfast', '-c:a', audio_codec, '-b:a', '192k', '-ac', '2',
                 '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p'
             ]
-            if scale_factor != 1.0:
+            if scale_filter:
                 main_cmd += ['-vf', scale_filter]
             if format == 'mp4':
                 main_cmd += ['-movflags', '+faststart']
@@ -359,7 +362,9 @@ def generate():
     padding = float(request.form.get('padding', 0))
     scale_factor = float(request.form.get('scale_factor', 1.0))
     audio_index = request.form.get('audio_index', '0')
-    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}")
+    res_str = request.form.get('resolution', '1920x1080')
+    scaled_width, scaled_height = map(int, res_str.split('x'))
+    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}, resolution={res_str}")
     if not all([start_str, end_str, video]):
         app.logger.warning(f"Missing required params in generate: start={start_str}, end={end_str}, video={video}")
         return redirect(url_for('output'))
@@ -381,8 +386,6 @@ def generate():
     end_time = end_str.replace(':', '-').replace(',', '.')
     res = get_resolution(video)
     original_width, original_height = res
-    scaled_width = int(original_width * scale_factor)
-    scaled_height = int(original_height * scale_factor)
     scaled_width = scaled_width if scaled_width % 2 == 0 else scaled_width - 1
     scaled_height = scaled_height if scaled_height % 2 == 0 else scaled_height - 1
     padding_str = f"p{padding}" if padding > 0 else ""
