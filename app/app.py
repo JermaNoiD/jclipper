@@ -362,9 +362,10 @@ def generate():
     padding = float(request.form.get('padding', 0))
     scale_factor = float(request.form.get('scale_factor', 1.0))
     audio_index = request.form.get('audio_index', '0')
-    res_str = request.form.get('resolution', '1920x1080')
-    scaled_width, scaled_height = map(int, res_str.split('x'))
-    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}, resolution={res_str}")
+    # Remove direct resolution parsing from form; calculate from scale_factor
+    # res_str = request.form.get('resolution', '1920x1080')
+    # scaled_width, scaled_height = map(int, res_str.split('x'))
+    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}")
     if not all([start_str, end_str, video]):
         app.logger.warning(f"Missing required params in generate: start={start_str}, end={end_str}, video={video}")
         return redirect(url_for('output'))
@@ -386,8 +387,13 @@ def generate():
     end_time = end_str.replace(':', '-').replace(',', '.')
     res = get_resolution(video)
     original_width, original_height = res
+    # Calculate scaled dimensions using scale_factor
+    scaled_width = int(original_width * scale_factor)
+    scaled_height = int(original_height * scale_factor)
+    # Ensure even dimensions for FFmpeg
     scaled_width = scaled_width if scaled_width % 2 == 0 else scaled_width - 1
     scaled_height = scaled_height if scaled_height % 2 == 0 else scaled_height - 1
+    app.logger.info(f"Calculated scaled resolution: {scaled_width}x{scaled_height}")
     padding_str = f"p{padding}" if padding > 0 else ""
     safe_filename = f"{movie_name}_{start_time}_to_{end_time}_{scaled_width}x{scaled_height}{padding_str}.{format}"
     output_file = os.path.join(OUTPUT_DIR, safe_filename)
