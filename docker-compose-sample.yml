@@ -3,6 +3,7 @@ services:
     container_name: jclipper
     environment:
       - MOVIES_DIR=/movies
+      - TV_SHOWS_DIR=/tv
       - OUTPUT_DIR=/output
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
       - SECRET_KEY=secret #Set this to something random
@@ -22,4 +23,5 @@ services:
     restart: unless-stopped
     volumes:
       - /path/to/movies:/movies:ro  #Movies directory
+      - /path/to/tv_shows:/tv:ro    #TV shows directory (Show/Season/episode structure)
       - /path/to/output_clips:/output #Output directory

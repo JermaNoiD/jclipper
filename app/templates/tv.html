@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Jclipper - TV Clipper{% endblock %}
+{% block content %}
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
+    <div class="container mx-auto px-4">
+        <div class="flex justify-center">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400" placeholder="Search TV shows..." onkeyup="filterShows()">
+        </div>
+    </div>
+</nav>
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
+        {% if tv_shows %}
+        <ul class="space-y-1" id="showList">
+            {% for show in tv_shows %}
+            <li class="show-item" data-show-name="{{ show.name | lower }}">
+                <div class="show-header flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" onclick="toggleShow(this)">
+                    <span class="font-semibold text-gray-900 dark:text-gray-100">{{ show.name }}</span>
+                    <i class="fas fa-chevron-right text-gray-500 dark:text-gray-400 text-sm transition-transform"></i>
+                </div>
+                <ul class="seasons hidden pl-4 mt-1 space-y-1">
+                    {% for season in show.seasons %}
+                    <li class="season-item">
+                        <div class="season-header flex items-center justify-between p-2 rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" onclick="toggleSeason(this)">
+                            <span class="text-gray-800 dark:text-gray-200 font-medium">{{ season.name }}</span>
+                            <i class="fas fa-chevron-right text-gray-500 dark:text-gray-400 text-sm transition-transform"></i>
+                        </div>
+                        <ul class="episodes hidden pl-4 mt-1 space-y-1">
+                            {% for ep in season.episodes %}
+                            {% set ep_display = ep.name | splitext | first | clean_movie_name %}
+                            <li class="episode-item flex items-center p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {% if not ep.has_srt %}cursor-not-allowed opacity-50{% endif %}" data-episode-name="{{ ep_display | lower }}">
+                                <a href="{% if ep.has_srt %}{{ url_for('subtitles', movie=ep.video, back=url_for('tv')) }}{% else %}#{% endif %}" class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors">{{ ep_display }}</a>
+                                {% if not ep.has_srt %}<span class="no-srt-text text-red-900 dark:text-red-300 text-sm bg-red-200 dark:bg-red-900 px-2 py-1 rounded transition-colors ml-2">&lt; No subtitle file available</span>{% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-gray-500 dark:text-gray-400 text-center py-8">
+            No TV shows found. Check your <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">TV_SHOWS_DIR</code> setting.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script src="{{ url_for('static', filename='js/filterTv.js') }}"></script>
+{% endblock %}

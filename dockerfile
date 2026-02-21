@@ -47,11 +47,12 @@ COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/local/bin/
 
 # Set default environment variables (can be overridden with docker run)
 ENV MOVIES_DIR=/movies
-ENV TMP_DIR=/tmp/output
+ENV TEMP_DIR=/tmp/jclipper
 ENV VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv
 
 # Expose port
 EXPOSE 5000
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+# Run with gunicorn - single worker with threads, since the app uses in-process
+# state (active_processes, video_info_cache) and threading for background encodes
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "app:app"]

@@ -6,7 +6,7 @@
     <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ pretty_movie_name }}</h1>
     <div id="formContainer" class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
         <h2 class="text-xl text-center font-semibold text-gray-900 dark:text-gray-200 mb-4">Output Settings</h2>
-        <form method="POST" action="{{ url_for('generate') }}" class="space-y-4" id="generate-form" onsubmit="startPulse(); return true;">
+        <form method="POST" action="{{ url_for('generate') }}" class="space-y-4" id="generate-form">
             <input type="hidden" name="start" value="{{ start }}">
             <input type="hidden" name="end" value="{{ end }}">
             <input type="hidden" name="video" value="{{ video }}">
@@ -50,12 +50,15 @@
         </form>
     </div>
     <div class="mt-4 flex justify-center space-x-4 max-w-3xl mx-auto">
-        <a href="{{ url_for('subtitles', movie=video) }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors   flex items-center" title="Back to Subtitles">
+        <a href="{{ url_for('subtitles', movie=video) }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" title="Back to Subtitles">
             <i class="fas fa-arrow-left"></i>
         </a>
         <button type="submit" form="generate-form" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 dark:bg-green-400 dark:hover:bg-green-300 transition-colors flex items-center" title="Generate Clip">
             <i class="fas fa-check-circle"></i>
         </button>
+        <a id="cancel-link" href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding?');" class="hidden bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center" title="Cancel Encoding">
+            <i class="fas fa-times-circle"></i>
+        </a>
     </div>
 </div>
 {% endblock %}
@@ -63,33 +66,73 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
 <script>
-    document.querySelector('form').id = 'generate-form';
-    
+    const form = document.getElementById('generate-form');
+    const formContainer = document.getElementById('formContainer');
+    const submitBtn = document.querySelector('button[type="submit"]');
+    const cancelLink = document.getElementById('cancel-link');
+
     // Update padding value dynamically
     const paddingInput = document.querySelector('input[name="padding"]');
     const paddingSpan = document.getElementById('padding-value');
     paddingInput.addEventListener('input', function() {
         paddingSpan.textContent = this.value;
     });
-    
+
     // Update scaled resolution dynamically
     const scaleInput = document.querySelector('input[name="scale_factor"]');
     const scaledSpan = document.getElementById('scaled-resolution');
     function updateResolution() {
         fetch(`/resolution?scale=${scaleInput.value}`)
             .then(response => response.json())
-            .then(data => {
-                scaledSpan.textContent = data.scaled;
-            });
+            .then(data => { scaledSpan.textContent = data.scaled; });
     }
     scaleInput.addEventListener('input', updateResolution);
-    // Initialize resolution on page load
     updateResolution();
 
-    function startPulse() {
-    console.log('Starting pulse animation');
-    const formContainer = document.getElementById('formContainer');
-    formContainer.classList.add('pulse-animation');
-}
+    function resetForm() {
+        formContainer.classList.remove('pulse-animation');
+        submitBtn.disabled = false;
+        cancelLink.classList.add('hidden');
+    }
+
+    function pollForCompletion() {
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    window.location.href = '{{ url_for("preview") }}';
+                } else if (data.status === 'failure') {
+                    resetForm();
+                    alert('Encoding failed. Check server logs for details.');
+                } else {
+                    setTimeout(pollForCompletion, 2000);
+                }
+            })
+            .catch(() => setTimeout(pollForCompletion, 5000));
+    }
+
+    // Submit via fetch; output page pulses while encoding, then navigates to preview on success
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        formContainer.classList.add('pulse-animation');
+        submitBtn.disabled = true;
+        cancelLink.classList.remove('hidden');
+
+        fetch('/generate', { method: 'POST', body: new FormData(form) })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'encoding') {
+                    pollForCompletion();
+                } else {
+                    resetForm();
+                    alert('Error: ' + (data.error || 'Unknown error. Check logs.'));
+                }
+            })
+            .catch(err => {
+                resetForm();
+                console.error('Generate error:', err);
+                alert('Failed to generate clip. Please try again.');
+            });
+    });
 </script>
 {% endblock %}

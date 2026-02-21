@@ -3,35 +3,42 @@
 {% block content %}
 <div class="container mx-auto mt-8 px-4 flex-grow">
     <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ movie_name }}</h1>
-    <div id="previewContainer" class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center {% if main_status == 'encoding' %}pulse-animation{% endif %}">
-        <div id="failure-msg" class="text-red-500 dark:text-red-400 text-center mb-4" style="display: {% if main_status == 'failure' %}block{% else %}none{% endif %} ;">
-            Main encoding failed. Check FFmpeg output below for details.
+    <div id="previewContainer" class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors flex flex-col items-center">
+        {% if main_status == 'failure' %}
+        <div class="text-red-500 dark:text-red-400 text-center mb-4">
+            Encoding failed. Check the FFmpeg output below for details.
         </div>
-        {% set file_to_serve = output if main_status == 'success' else file %}
-        {% set mime_type = 'video/mp4' if format == 'mp4' else 'video/x-matroska' if format == 'mkv' else 'video/x-msvideo' if format == 'avi' else 'image/gif' if format == 'gif' else 'image/avif' if format == 'avif' else 'audio/mpeg' if format == 'mp3' else '' %}
+        {% endif %}
+        {% set mime_type = 'video/mp4' if format == 'mp4' else 'image/gif' if format == 'gif' else 'audio/mpeg' if format == 'mp3' else '' %}
         {% set is_audio = format == 'mp3' %}
-        {% set is_image = format in ['gif', 'avif'] %}
+        {% set is_image = format == 'gif' %}
         {% set is_video = not is_audio and not is_image %}
-        {% if is_video %}
-        <video class="preview-video rounded-lg mx-auto" controls crossorigin="anonymous" playsinline style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
-            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
-            Your browser does not support the video tag.
-        </video>
-        {% elif is_audio %}
-        <audio class="preview-video" controls crossorigin="anonymous" style="max-width: 100%;">
-            <source src="{{ url_for('serve', file=file_to_serve) }}" type="{{ mime_type }}">
-            Your browser does not support the audio tag.
-        </audio>
-        {% elif is_image %}
-        <img src="{{ url_for('serve', file=file_to_serve) }}" class="preview-video rounded-lg mx-auto" style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+        {% if main_status == 'success' %}
+            {% if is_video %}
+            <video class="preview-video rounded-lg mx-auto" controls crossorigin="anonymous" playsinline style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+                <source src="{{ url_for('serve', file=output) }}" type="{{ mime_type }}">
+                Your browser does not support the video tag.
+            </video>
+            {% elif is_audio %}
+            <audio class="preview-video" controls crossorigin="anonymous" style="max-width: 100%;">
+                <source src="{{ url_for('serve', file=output) }}" type="{{ mime_type }}">
+                Your browser does not support the audio tag.
+            </audio>
+            {% elif is_image %}
+            <img src="{{ url_for('serve', file=output) }}" class="preview-video rounded-lg mx-auto" style="max-width: 100%;" onerror="this.style.display='none'; document.getElementById('video-error').style.display='block';">
+            {% endif %}
         {% endif %}
         <div id="video-error" style="display: none; color: red; text-align: center;">
             Failed to load media. Try downloading or using a different format.
         </div>
         <div class="mt-4 flex justify-center space-x-4">
             {% if from_history %}
-            <a href="{{ url_for('history') }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors   flex items-center" title="Back to History">
+            <a href="{{ url_for('history') }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" title="Back to History">
                 <i class="fas fa-arrow-left"></i>
+            </a>
+            {% else %}
+            <a href="{{ url_for('home') }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" title="Home">
+                <i class="fas fa-home"></i>
             </a>
             {% endif %}
             <button id="download-btn" onclick="window.location.href='{{ url_for('download') }}'" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Download">
@@ -51,14 +58,6 @@
                 <i class="fas fa-trash"></i>
             </button>
             {% endif %}
-            {% if not from_history %}
-            <a href="{{ url_for('cancel_encoding') }}?next=output" onclick="return confirm('Cancel encoding and modify?');" class="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-400 transition-colors flex items-center" title="Modify">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <a href="{{ url_for('cancel_encoding') }}?next=index" onclick="return confirm('Cancel encoding and return to home?');" class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center" title="Cancel">
-                <i class="fas fa-times-circle"></i>
-            </a>
-            {% endif %}
         </div>
     </div>
     {% if not from_history %}
@@ -68,12 +67,11 @@
                 <i class="fas fa-terminal"></i>
             </button>
             <div id="status-icon" class="icon-container bg-gray-200 dark:bg-gray-700">
-                <i class="fas fa-sync-alt fa-spin text-blue-500 {% if main_status != 'encoding' %}hidden{% endif %}" title="Encoding in progress"></i>
                 <i class="fas fa-check-circle text-green-500 {% if main_status != 'success' %}hidden{% endif %}" title="Encoding complete"></i>
             </div>
         </div>
         <div id="ffmpeg-output" class="hidden mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg w-full">
-            <pre class="text-[8px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available yet.{% endif %}</pre>
+            <pre class="text-[8px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{% if main_ffmpeg_output %}{{ main_ffmpeg_output }}{% else %}FFmpeg output not available.{% endif %}</pre>
         </div>
     </div>
     {% endif %}
@@ -84,47 +82,25 @@
 <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
 <script>
     function deleteFile(filePath) {
-            console.log('Deleting file:', filePath);
-            if (confirm('Are you sure you want to delete this clip?')) {
-                fetch('/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'file_path=' + encodeURIComponent(filePath)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Delete response:', data);
-                    if (data.success) {
-                        window.location.href = '{{ url_for('history') }}';
-                    } else {
-                        alert('Failed to delete file: ' + (data.message || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error during delete fetch:', error);
-                    alert('An error occurred while deleting the file.');
-                });
-            }
-        }
-    function uploadToS3() {
-        fetch('/upload_s3')
+        if (confirm('Are you sure you want to delete this clip?')) {
+            fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'file_path=' + encodeURIComponent(filePath)
+            })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    navigator.clipboard.writeText(data.url).then(() => {
-                        alert('Video uploaded to S3 and video link copied to clipboard! Works in Discord; may not show a preview in Facebook Messenger.');
-                    }).catch(err => {
-                        console.error('Failed to copy: ', err);
-                        alert('Video uploaded to S3 but failed to copy video link.');
-                    });
+                    window.location.href = '{{ url_for('history') }}';
                 } else {
-                    alert('S3 upload failed: ' + data.message);
+                    alert('Failed to delete file: ' + (data.message || 'Unknown error'));
                 }
             })
             .catch(error => {
-                console.error('S3 upload error:', error);
-                alert('S3 upload failed.');
+                console.error('Error during delete fetch:', error);
+                alert('An error occurred while deleting the file.');
             });
+        }
     }
 
     function shareVideo() {
@@ -136,27 +112,15 @@
             .then(data => {
                 if (data.success) {
                     if (navigator.share) {
-                        navigator.share({
-                            title: title,
-                            text: text,
-                            url: data.url
-                        }).then(() => {
-                            console.log('Shared successfully');
-                        }).catch(err => {
-                            console.error('Share failed:', err);
-                            navigator.clipboard.writeText(data.url).then(() => {
-                                alert('Share not supported. Video link copied to clipboard!');
-                            }).catch(err => {
-                                console.error('Failed to copy:', err);
-                                alert('Share not supported and failed to copy video link.');
+                        navigator.share({ title: title, text: text, url: data.url })
+                            .catch(err => {
+                                navigator.clipboard.writeText(data.url).then(() => {
+                                    alert('Share not supported. Video link copied to clipboard!');
+                                });
                             });
-                        });
                     } else {
                         navigator.clipboard.writeText(data.url).then(() => {
                             alert('Share not supported. Video link copied to clipboard!');
-                        }).catch(err => {
-                            console.error('Failed to copy:', err);
-                            alert('Share not supported and failed to copy video link.');
                         });
                     }
                 } else {
@@ -171,62 +135,5 @@
         alert('Sharing is not available because S3 is not configured.');
         {% endif %}
     }
-
-    function updateStatus() {
-        {% if not from_history %}
-        fetch('/status')
-            .then(response => response.json())
-            .then(data => {
-                const status = data.status;
-                const output = data.ffmpeg_output;
-                const failureDiv = document.getElementById('failure-msg');
-                failureDiv.style.display = (status === 'failure') ? 'block' : 'none';
-                const pre = document.querySelector('#ffmpeg-output pre');
-                pre.textContent = output || 'FFmpeg output not available yet.';
-                const container = document.getElementById('previewContainer');
-                if (status === 'encoding') {
-                    container.classList.add('pulse-animation');
-                } else {
-                    container.classList.remove('pulse-animation');
-                }
-                const downloadBtn = document.getElementById('download-btn');
-                const shareBtn = document.getElementById('share-btn');
-                if (status === 'success') {
-                    downloadBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                    downloadBtn.classList.add('bg-blue-500', 'hover:bg-blue-400');
-                    downloadBtn.removeAttribute('disabled');
-                    shareBtn.classList.remove('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                    shareBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-400');
-                    shareBtn.removeAttribute('disabled');
-                } else {
-                    downloadBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                    downloadBtn.classList.remove('bg-blue-500', 'hover:bg-blue-400');
-                    downloadBtn.setAttribute('disabled', 'disabled');
-                    shareBtn.classList.add('bg-gray-300', 'cursor-not-allowed', 'dark:bg-gray-600', 'pointer-events-none');
-                    shareBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-400');
-                    shareBtn.setAttribute('disabled', 'disabled');
-                }
-                const refreshIcon = document.querySelector('#status-icon .fa-sync-alt');
-                const successIcon = document.querySelector('#status-icon .fa-check-circle');
-                if (status === 'encoding') {
-                    refreshIcon.classList.remove('hidden');
-                    successIcon.classList.add('hidden');
-                } else if (status === 'success') {
-                    refreshIcon.classList.add('hidden');
-                    successIcon.classList.remove('hidden');
-                } else {
-                    refreshIcon.classList.add('hidden');
-                    successIcon.classList.add('hidden');
-                }
-                if (status === 'encoding') {
-                    setTimeout(updateStatus, 5000);
-                }
-            })
-            .catch(error => console.error('Status poll error:', error));
-        {% endif %}
-    }
-    window.onload = function() {
-        updateStatus();
-    };
 </script>
 {% endblock %}
