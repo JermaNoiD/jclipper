@@ -15,6 +15,7 @@ services:
     container_name: jclipper
     environment:
       - MOVIES_DIR=/movies #Internal docker directory, no need to actually change this. Just map your volume path to this directory
+      - TV_SHOWS_DIR=/tv #Internal docker directory, no need to actually change this. Just map your volume path to this directory
       - OUTPUT_DIR=/output #Internal docker directory, no need to actually change this. Just map your volume path to this directory
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv #Video extensions to scan for
       - SECRET_KEY=secret #Session secret. Set this to something random.
@@ -34,11 +35,13 @@ services:
     restart: unless-stopped
     volumes:
       - /path/to/movies:/movies:ro  #Movies directory
+      - /path/to/tv_shows:/tv:ro    #TV shows directory (Show/Season/episode structure)
       - /path/to/output_clips:/output #Output directory
 ```
 
+#### Select Movie or TV show workflow from the home page
 
-#### Select your movie
+#### Select your movie or tv show season>episode
 The home page should show a list of your movie files if they've been mapped correctly. The app has been programmed to search recursively through the /movies folder for the common extensions listed in the VIDEO_EXTENSIONS environment variable.
 Select a valid movie to proceed to the subtitle page.
 
