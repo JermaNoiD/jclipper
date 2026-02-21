@@ -19,7 +19,6 @@ services:
       - OUTPUT_DIR=/output #Internal docker directory, no need to actually change this. Just map your volume path to this directory
       - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv #Video extensions to scan for
       - SECRET_KEY=secret #Session secret. Set this to something random.
-      - PREVIEW_RESOLUTION=1280x720
       - DEFAULT_LANGUAGE=en
       - S3_ENDPOINT= #provide all S3 fields to enable the S3 upload button
       - S3_REGION=
@@ -65,11 +64,11 @@ Click proceed to continue to the output settings page.
 If you need to add some seconds of time flanking the clip to capture a certain moment outside the .srt timestamp, this can be done by adding some seconds to the padding field. 
 Scale factor allows you to scale the resolution of the output clip down from the native file resolution.
 Format allows you to select:
-- mp4,mkv,avi for audio/video
-- gif,avif for video only
+- mp4 for audio/video
+- gif for video only
 - mp3 for audio only.
 
-Click Generate to create the clip. For 4k files this may take a minute depending on how large the clip is, but a quick 720p preview clip will be generated
+Click Generate to create the clip. For 4k files this may take a minute depending on how large the clip is
 
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/fe6e4e88-0fe1-4826-bdeb-447ead7c369d" />
 
