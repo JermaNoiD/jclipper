@@ -4,7 +4,7 @@
 <nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
     <div class="container mx-auto px-4">
         <div class="flex justify-center">
-            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
+            <input type="text" id="searchInput" value="{{ search_query or '' }}" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400 transition-colors" placeholder="Search subtitles..." onkeyup="handleSearchKey(event)">
         </div>
     </div>
 </nav>

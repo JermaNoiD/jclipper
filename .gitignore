@@ -1,7 +1,7 @@
 docker-compose.yml
+.env
 .DS_Store
 \@eaDir
 @eaDir
 *.pyc
 __pycache__/
-__pycache__

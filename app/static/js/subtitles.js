@@ -30,7 +30,7 @@ function highlightSubtitles() {
         // Reset content
         contentDiv.innerHTML = isSeparator ? '' : item.dataset.originalContent;
         if (!isSeparator && searchTerm && item.dataset.originalContent.toLowerCase().includes(searchTerm)) {
-            const regex = new RegExp(`(${searchTerm})`, 'gi');
+            const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
             contentDiv.innerHTML = item.dataset.originalContent.replace(regex, '<span class="highlight">$1</span>');
         }
 
@@ -113,7 +113,25 @@ function clearSelections() {
 
 function createClip() {
     if (!submitButton.disabled) {
-        document.getElementById('subtitle-form').submit();
+        const form = document.getElementById('subtitle-form');
+        // Kick off server-side preview rendering before navigating, so the output
+        // page can show the preview immediately. The server starts the render
+        // synchronously; keepalive ensures the request isn't aborted by navigation.
+        try {
+            const video = form.querySelector('input[name="video"]').value;
+            const start = startTimeInput.value;
+            const end = endTimeInput.value;
+            if (video && start && end) {
+                const url = '/preview-source?file=' + encodeURIComponent(video) +
+                    '&start=' + encodeURIComponent(start) +
+                    '&end=' + encodeURIComponent(end) +
+                    '&pad=15';
+                fetch(url, { keepalive: true });
+            }
+        } catch (e) {
+            console.warn('Preview prefetch failed:', e);
+        }
+        form.submit();
     }
 }
 
@@ -171,4 +189,8 @@ window.addEventListener('load', () => {
         endTimeInput.value = items[0].dataset.endTime;
     }
     highlightSubtitles();
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput && searchInput.value.trim()) {
+        autoScrollToFirstMatch();
+    }
 });

@@ -4,36 +4,92 @@
 
 <div class="container mx-auto mt-8 px-4 flex-grow">
     <h1 class="text-xl font-bold text-gray-900 dark:text-gray-200 flex justify-center sticky top-0 bg-white dark:bg-gray-800 z-10 p-0 w-100% border-t border-l border-r rounded-t-lg border-gray-300 dark:border-gray-700 max-w-3xl mx-auto transition-colors">{{ pretty_movie_name }}</h1>
+
+    <!-- Preview & Trim -->
+    <div class="bg-white border border-gray-300 p-4 max-w-3xl mx-auto dark:bg-gray-800 dark:border-gray-700 transition-colors space-y-3">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 text-center">Preview &amp; Trim</h2>
+        <video id="preview-video" class="w-full rounded bg-black" controls preload="metadata"></video>
+        <div id="preview-status" class="hidden relative h-10 overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
+            <div id="preview-fill" class="absolute inset-y-0 left-0 w-0 bg-blue-500 dark:bg-blue-600 transition-all duration-500"></div>
+            <div class="relative z-10 flex h-full items-center justify-center gap-2 text-sm text-gray-900 dark:text-gray-100">
+                <i class="fas fa-spinner fa-spin" id="preview-status-icon"></i>
+                <span id="preview-status-text">Preparing preview...</span>
+                <button type="button" id="preview-retry" class="hidden bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700">Retry</button>
+            </div>
+        </div>
+        <div class="space-y-2">
+            <div class="flex justify-between text-xs text-gray-600 dark:text-gray-300 font-mono">
+                <span>Start: <span id="time-start">00:00:00,000</span></span>
+                <span>Duration: <span id="time-duration">00:00:00,000</span></span>
+                <span>End: <span id="time-end">00:00:00,000</span></span>
+            </div>
+            <div id="timeline" class="relative h-8 bg-gray-100 dark:bg-gray-700 cursor-pointer select-none overflow-hidden rounded-lg shadow-[inset_0_2px_5px_rgba(0,0,0,0.35)]"
+                 style="background-image: repeating-linear-gradient(to right, transparent, transparent calc(10% - 1px), rgba(107,114,128,0.35) calc(10% - 1px), rgba(107,114,128,0.35) 10%);">
+                <div id="selection" class="absolute top-0 h-full bg-blue-500/30 border-x-2 border-blue-500"></div>
+                <div id="handle-start" class="absolute top-0 h-full w-4 bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 border border-yellow-700 rounded cursor-ew-resize z-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_2px_4px_rgba(0,0,0,0.45)] hover:from-yellow-200 hover:via-yellow-400 hover:to-yellow-500 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_3px_6px_rgba(0,0,0,0.5)] transition-all duration-150 flex items-center justify-center" title="Drag to set start">
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                </div>
+                <div id="handle-end" class="absolute top-0 h-full w-4 bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 border border-yellow-700 rounded cursor-ew-resize z-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_2px_4px_rgba(0,0,0,0.45)] hover:from-yellow-200 hover:via-yellow-400 hover:to-yellow-500 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_3px_6px_rgba(0,0,0,0.5)] transition-all duration-150 flex items-center justify-center" title="Drag to set end">
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                    <span class="block w-0.5 h-3 bg-yellow-900/60 rounded-full mx-px"></span>
+                </div>
+                <div id="playhead" class="absolute top-0 h-full w-0.5 bg-red-500 z-20 pointer-events-none"></div>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 text-center">Drag the yellow handles to trim. Minimum clip length is 1 second.</div>
+        </div>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <button type="button" id="btn-play-selection" class="bg-blue-600 text-white text-sm whitespace-nowrap py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center">
+                <i class="fas fa-play mr-2"></i>Play Selection
+            </button>
+            <div class="flex items-center gap-2">
+                <select id="preview-pad" class="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-1.5 text-xs text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
+                    <option value="15" selected>15 seconds</option>
+                    <option value="30">30 seconds</option>
+                    <option value="60">1 minute</option>
+                    <option value="120">2 minutes</option>
+                    <option value="300">5 minutes</option>
+                    <option value="600">10 minutes</option>
+                </select>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Preview padding time: changing this will re-clip the video.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Output Settings -->
     <div id="formContainer" class="bg-white rounded-b-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
         <h2 class="text-xl text-center font-semibold text-gray-900 dark:text-gray-200 mb-4">Output Settings</h2>
         <form method="POST" action="{{ url_for('generate') }}" class="space-y-4" id="generate-form">
-            <input type="hidden" name="start" value="{{ start }}">
-            <input type="hidden" name="end" value="{{ end }}">
+            <input type="hidden" name="start" id="field-start" value="{{ start }}">
+            <input type="hidden" name="end" id="field-end" value="{{ end }}">
             <input type="hidden" name="video" value="{{ video }}">
             <input type="hidden" name="resolution" value="{{ original_res[0] }}x{{ original_res[1] }}">
+
+            <!-- Format -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-                <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Padding (seconds):</label>
-                <div class="w-full sm:w-2/3 flex items-center space-x-2">
-                    <input type="range" step="0.1" min="0" max="10" name="padding" value="{{ padding if padding else '0' }}" class="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
-                    <span class="text-gray-700 dark:text-gray-300 min-w-[80px]"><span id="padding-value">{{ padding if padding else '0' }}</span> seconds</span>
+                <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Format:</label>
+                <div class="w-full sm:w-2/3 flex items-center">
+                    <select name="format" id="format-select" class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
+                        {% for fmt in available_formats %}
+                        <option value="{{ fmt }}" {% if fmt == default_format %}selected{% endif %}>{{ fmt.upper() }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="text-gray-700 dark:text-gray-300 ml-2">Source: {{ source_format.upper() if source_format else 'N/A' }}</span>
                 </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+
+            <!-- Scale Factor -->
+            <div id="scale-group" class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
                 <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Scale Factor: (Original: {{ original_res[0] }}x{{ original_res[1] }})</label>
                 <div class="w-full sm:w-2/3 flex items-center space-x-2">
                     <input type="range" step="0.1" min="0.1" max="1.0" name="scale_factor" value="{{ session.get('scale_factor', 1.0) }}" class="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
                     <span class="text-gray-700 dark:text-gray-300 min-w-[120px]">Scaled: <span id="scaled-resolution">{{ original_res[0] }}x{{ original_res[1] }}</span></span>
                 </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-                <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Format:</label>
-                <select name="format" class="w-full sm:w-2/3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
-                    {% for fmt in available_formats %}
-                    <option value="{{ fmt }}" {% if fmt == default_format %}selected{% endif %}>{{ fmt.upper() }}</option>
-                    {% endfor %}
-                </select>
-                <span class="text-gray-700 dark:text-gray-300 ml-2">Source: {{ source_format.upper() if source_format else 'N/A' }}</span>
-            </div>
+
+            <!-- Audio Stream -->
             {% if has_multiple_audio %}
             <div class="flex flex-col sm:flex-row sm:items-start sm:space-x-4">
                 <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Audio Stream:</label>
@@ -46,9 +102,67 @@
                     {% endfor %}
                 </div>
             </div>
+            {% else %}
+            <input type="hidden" name="audio_index" value="{{ audio_index }}">
             {% endif %}
+
+            <!-- Advanced Settings -->
+            <details class="border border-gray-200 dark:border-gray-600 rounded-lg">
+                <summary class="cursor-pointer p-3 text-gray-700 dark:text-gray-300 font-medium select-none">
+                    <i class="fas fa-sliders mr-2"></i>Advanced Settings
+                </summary>
+                <div class="p-3 pt-0 space-y-4">
+                    <!-- CRF (mp4 only) -->
+                    <div id="adv-crf" class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                        <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Quality (CRF):</label>
+                        <div class="w-full sm:w-2/3 flex items-center space-x-2">
+                            <input type="range" step="1" min="0" max="51" name="crf" id="crf-input" value="23" class="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
+                            <span class="text-gray-700 dark:text-gray-300 min-w-[40px]"><span id="crf-value">23</span></span>
+                        </div>
+                    </div>
+                    <!-- Preset (mp4 only) -->
+                    <div id="adv-preset" class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                        <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Encoding Preset:</label>
+                        <div class="w-full sm:w-2/3">
+                            <select name="preset" id="preset-select" class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
+                                <option value="ultrafast">ultrafast (fastest)</option>
+                                <option value="superfast">superfast</option>
+                                <option value="veryfast" selected>veryfast (default)</option>
+                                <option value="faster">faster</option>
+                                <option value="fast">fast</option>
+                                <option value="medium">medium</option>
+                                <option value="slow">slow</option>
+                                <option value="slower">slower</option>
+                                <option value="veryslow">veryslow (smallest file)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Audio Bitrate (mp4, mp3) -->
+                    <div id="adv-bitrate" class="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                        <label class="text-gray-700 dark:text-gray-300 font-medium w-full sm:w-1/3">Audio Bitrate:</label>
+                        <div class="w-full sm:w-2/3">
+                            <select name="audio_bitrate" id="audio-bitrate-select" class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors">
+                                <option value="128k">128 kbps</option>
+                                <option value="192k" selected>192 kbps (default)</option>
+                                <option value="256k">256 kbps</option>
+                                <option value="320k">320 kbps</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- GIF note -->
+                    <div id="adv-gif-note" class="hidden text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                        <i class="fas fa-info-circle mr-2"></i>GIF is a lossy, palette-based format. Quality is fixed and cannot be adjusted.
+                    </div>
+                    <!-- WAV note -->
+                    <div id="adv-wav-note" class="hidden text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                        <i class="fas fa-info-circle mr-2"></i>WAV is uncompressed PCM audio. No quality settings apply.
+                    </div>
+                </div>
+            </details>
         </form>
     </div>
+
+    <!-- Action Buttons -->
     <div class="mt-4 flex justify-center space-x-4 max-w-3xl mx-auto">
         <a href="{{ url_for('subtitles', movie=video) }}" class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center" title="Back to Subtitles">
             <i class="fas fa-arrow-left"></i>
@@ -71,24 +185,265 @@
     const submitBtn = document.querySelector('button[type="submit"]');
     const cancelLink = document.getElementById('cancel-link');
 
-    // Update padding value dynamically
-    const paddingInput = document.querySelector('input[name="padding"]');
-    const paddingSpan = document.getElementById('padding-value');
-    paddingInput.addEventListener('input', function() {
-        paddingSpan.textContent = this.value;
+    // ===== Time helpers =====
+    function parseTime(str) {
+        if (!str) return 0;
+        const parts = str.split(',');
+        const hms = parts[0].split(':').map(Number);
+        const ms = parts[1] ? parseInt(parts[1]) : 0;
+        return hms[0] * 3600 + hms[1] * 60 + hms[2] + ms / 1000;
+    }
+    function formatTime(sec) {
+        sec = Math.max(0, sec);
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        const ms = Math.round((sec - Math.floor(sec)) * 1000);
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + ',' + String(ms).padStart(3, '0');
+    }
+
+    // ===== Preview player =====
+    const video = document.getElementById('preview-video');
+    const timeline = document.getElementById('timeline');
+    const selection = document.getElementById('selection');
+    const handleStart = document.getElementById('handle-start');
+    const handleEnd = document.getElementById('handle-end');
+    const playhead = document.getElementById('playhead');
+    const timeStart = document.getElementById('time-start');
+    const timeDuration = document.getElementById('time-duration');
+    const timeEnd = document.getElementById('time-end');
+    const fieldStart = document.getElementById('field-start');
+    const fieldEnd = document.getElementById('field-end');
+    const btnPlaySelection = document.getElementById('btn-play-selection');
+    const previewPad = document.getElementById('preview-pad');
+
+    const MIN_DURATION = 1;
+    let duration = 0;
+    // previewOffset: original-timeline position (seconds) of the preview's start.
+    // 0 when the whole source is served; otherwise the padded selection's start.
+    let previewOffset = 0;
+    let startSec = parseTime(fieldStart.value);
+    let endSec = parseTime(fieldEnd.value);
+    let looping = false;
+
+    const videoPath = {{ video | tojson }};
+    const previewStatus = document.getElementById('preview-status');
+    const previewStatusText = document.getElementById('preview-status-text');
+    const previewStatusIcon = document.getElementById('preview-status-icon');
+    const previewRetry = document.getElementById('preview-retry');
+    const previewFill = document.getElementById('preview-fill');
+
+    function setPreviewProgress(pct) {
+        if (pct == null) {
+            previewFill.style.width = '0%';
+            return;
+        }
+        previewFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+    function showPreviewStatus(msg, isError) {
+        previewStatusText.textContent = msg;
+        previewStatusIcon.className = isError ? 'fas fa-exclamation-triangle' : 'fas fa-spinner fa-spin';
+        previewRetry.classList.toggle('hidden', !isError);
+        if (isError) setPreviewProgress(null);
+        previewStatus.classList.remove('hidden');
+    }
+    function hidePreviewStatus() {
+        previewStatus.classList.add('hidden');
+        setPreviewProgress(null);
+    }
+    function setPreviewSrc(url) {
+        hidePreviewStatus();
+        video.src = url;
+    }
+    function preparePreview(retry) {
+        let url = '/preview-source?file=' + encodeURIComponent(videoPath);
+        if (fieldStart.value) url += '&start=' + encodeURIComponent(fieldStart.value);
+        if (fieldEnd.value) url += '&end=' + encodeURIComponent(fieldEnd.value);
+        url += '&pad=' + encodeURIComponent(previewPad.value);
+        if (retry) url += '&retry=1';
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.status === 'ready') {
+                    previewOffset = (typeof data.offset === 'number') ? data.offset : 0;
+                    setPreviewSrc(data.url);
+                } else if (data.status === 'generating') {
+                    const pct = (typeof data.progress === 'number') ? data.progress : null;
+                    let label;
+                    if (data.encoder === 'gpu') label = 'Preparing preview using NVENC encoding...';
+                    else if (data.encoder === 'cpu') label = 'Preparing preview using CPU encoding...';
+                    else label = 'Preparing preview...';
+                    previewStatusText.textContent = pct != null ? label + ' ' + pct + '%' : label;
+                    setPreviewProgress(pct);
+                    previewStatusIcon.className = 'fas fa-spinner fa-spin';
+                    previewRetry.classList.add('hidden');
+                    previewStatus.classList.remove('hidden');
+                    setTimeout(function() { preparePreview(false); }, 1000);
+                } else {
+                    showPreviewStatus('Preview unavailable: ' + (data.message || 'error'), true);
+                }
+            })
+            .catch(function() {
+                showPreviewStatus('Network error while preparing preview. Retrying...', true);
+                setTimeout(function() { preparePreview(false); }, 5000);
+            });
+    }
+    previewRetry.addEventListener('click', function() { preparePreview(true); });
+    previewPad.addEventListener('change', function() { preparePreview(true); });
+    preparePreview(false);
+
+    function updateTimeline() {
+        if (duration <= 0) return;
+        const startFrac = ((startSec - previewOffset) / duration) * 100;
+        const endFrac = ((endSec - previewOffset) / duration) * 100;
+        selection.style.left = startFrac + '%';
+        selection.style.width = (endFrac - startFrac) + '%';
+        handleStart.style.left = 'calc(' + startFrac + '% - 8px)';
+        handleEnd.style.left = 'calc(' + endFrac + '% - 8px)';
+        timeStart.textContent = formatTime(startSec);
+        timeEnd.textContent = formatTime(endSec);
+        timeDuration.textContent = formatTime(endSec - startSec);
+        fieldStart.value = formatTime(startSec);
+        fieldEnd.value = formatTime(endSec);
+    }
+
+    video.addEventListener('loadedmetadata', function() {
+        duration = video.duration;
+        const lo = previewOffset;
+        const hi = previewOffset + duration;
+        if (startSec < lo) startSec = lo;
+        if (startSec > hi) startSec = hi;
+        if (endSec < lo) endSec = lo;
+        if (endSec > hi) endSec = hi;
+        if (endSec - startSec < MIN_DURATION) {
+            if (startSec < lo + MIN_DURATION) {
+                startSec = lo;
+                endSec = Math.min(lo + MIN_DURATION, hi);
+            } else {
+                endSec = Math.min(hi, startSec + MIN_DURATION);
+            }
+        }
+        updateTimeline();
+        autoPlaySelection();
     });
 
-    // Update scaled resolution dynamically
+    video.addEventListener('timeupdate', function() {
+        if (duration <= 0) return;
+        const frac = (video.currentTime / duration) * 100;
+        playhead.style.left = frac + '%';
+        if (looping && video.currentTime >= endSec - previewOffset) {
+            video.currentTime = startSec - previewOffset;
+        }
+    });
+
+    btnPlaySelection.addEventListener('click', function() {
+        if (!isFinite(duration) || duration <= 0) return;
+        looping = true;
+        try { video.currentTime = startSec - previewOffset; } catch (e) { /* metadata not ready */ }
+        const p = video.play();
+        if (p && p.catch) p.catch(function(err) { console.warn('play failed:', err); });
+    });
+
+    function autoPlaySelection() {
+        if (!isFinite(duration) || duration <= 0) return;
+        looping = true;
+        try { video.currentTime = startSec - previewOffset; } catch (e) { /* metadata not ready */ }
+        const p = video.play();
+        if (p && p.catch) p.catch(function(err) {
+            console.warn('autoplay blocked:', err);
+            previewStatusText.textContent = 'Autoplay blocked. Click "Play Selection" to start.';
+            previewStatusIcon.className = 'fas fa-info-circle mr-2';
+            previewRetry.classList.add('hidden');
+            previewStatus.classList.remove('hidden');
+            previewStatus.classList.add('flex');
+        });
+    }
+    video.addEventListener('pause', function() {
+        looping = false;
+    });
+
+    // Drag handles
+    let activeHandle = null;
+    let justDragged = false;
+    function getFracFromEvent(e) {
+        const rect = timeline.getBoundingClientRect();
+        let frac = (e.clientX - rect.left) / rect.width;
+        return Math.max(0, Math.min(1, frac));
+    }
+    function onPointerDown(e, which) {
+        e.preventDefault();
+        activeHandle = which;
+        if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
+    }
+    handleStart.addEventListener('pointerdown', function(e) { onPointerDown(e, 'start'); });
+    handleEnd.addEventListener('pointerdown', function(e) { onPointerDown(e, 'end'); });
+
+    window.addEventListener('pointermove', function(e) {
+        if (!activeHandle) return;
+        const newSec = previewOffset + getFracFromEvent(e) * duration;
+        const hi = previewOffset + duration;
+        if (activeHandle === 'start') {
+            let ns = Math.min(newSec, endSec - MIN_DURATION);
+            startSec = Math.max(previewOffset, ns);
+        } else {
+            let ns = Math.max(newSec, startSec + MIN_DURATION);
+            endSec = Math.min(hi, ns);
+        }
+        updateTimeline();
+    });
+    window.addEventListener('pointerup', function() {
+        if (activeHandle) {
+            activeHandle = null;
+            justDragged = true;
+            setTimeout(function() { justDragged = false; }, 150);
+        }
+    });
+
+    // Click on timeline to seek
+    timeline.addEventListener('click', function(e) {
+        if (activeHandle || justDragged) return;
+        video.currentTime = getFracFromEvent(e) * duration;
+    });
+
+    // ===== Scale factor resolution =====
     const scaleInput = document.querySelector('input[name="scale_factor"]');
     const scaledSpan = document.getElementById('scaled-resolution');
     function updateResolution() {
-        fetch(`/resolution?scale=${scaleInput.value}`)
+        fetch('/resolution?scale=' + scaleInput.value)
             .then(response => response.json())
             .then(data => { scaledSpan.textContent = data.scaled; });
     }
     scaleInput.addEventListener('input', updateResolution);
     updateResolution();
 
+    // ===== Advanced visibility =====
+    const formatSelect = document.getElementById('format-select');
+    const scaleGroup = document.getElementById('scale-group');
+    const advCrf = document.getElementById('adv-crf');
+    const advPreset = document.getElementById('adv-preset');
+    const advBitrate = document.getElementById('adv-bitrate');
+    const advGifNote = document.getElementById('adv-gif-note');
+    const advWavNote = document.getElementById('adv-wav-note');
+    function updateAdvancedVisibility() {
+        const fmt = formatSelect.value;
+        scaleGroup.style.display = (fmt === 'mp3' || fmt === 'wav') ? 'none' : '';
+        advCrf.style.display = (fmt === 'mp4') ? '' : 'none';
+        advPreset.style.display = (fmt === 'mp4') ? '' : 'none';
+        advBitrate.style.display = (fmt === 'mp4' || fmt === 'mp3') ? '' : 'none';
+        advGifNote.style.display = (fmt === 'gif') ? '' : 'none';
+        advWavNote.style.display = (fmt === 'wav') ? '' : 'none';
+    }
+    formatSelect.addEventListener('change', updateAdvancedVisibility);
+    updateAdvancedVisibility();
+
+    // ===== CRF value display =====
+    const crfInput = document.getElementById('crf-input');
+    const crfValue = document.getElementById('crf-value');
+    crfInput.addEventListener('input', function() {
+        crfValue.textContent = this.value;
+    });
+
+    // ===== Form submit + polling =====
     function resetForm() {
         formContainer.classList.remove('pulse-animation');
         submitBtn.disabled = false;
@@ -111,7 +466,6 @@
             .catch(() => setTimeout(pollForCompletion, 5000));
     }
 
-    // Submit via fetch; output page pulses while encoding, then navigates to preview on success
     form.addEventListener('submit', function(e) {
         e.preventDefault();
         formContainer.classList.add('pulse-animation');

@@ -5,43 +5,38 @@ Dockerized web app for easily making clips from your library of movies using .sr
 - Docker and Docker Compose installed
 
 ## Installation
-Create a new docker-compose.yml file containing the following compose block
-Modify the /movies and /output volume mounts
-Within the same directory, run ```docker compose up -d```
-When running this docker compose as is, it will be accessible at http://[server IP]:5000
-```
-services:
-  jclipper:
-    container_name: jclipper
-    environment:
-      - MOVIES_DIR=/movies #Internal docker directory, no need to actually change this. Just map your volume path to this directory
-      - TV_SHOWS_DIR=/tv #Internal docker directory, no need to actually change this. Just map your volume path to this directory
-      - OUTPUT_DIR=/output #Internal docker directory, no need to actually change this. Just map your volume path to this directory
-      - VIDEO_EXTENSIONS=mp4,mkv,avi,mov,wmv,flv #Video extensions to scan for
-      - SECRET_KEY=secret #Session secret. Set this to something random.
-      - DEFAULT_LANGUAGE=en
-      - S3_ENDPOINT= #provide all S3 fields to enable the S3 upload button
-      - S3_REGION=
-      - S3_BUCKET=
-      - S3_KEY=
-      - S3_SECRET=
-      - S3_LINK_FORMAT= #presigned or basic. presigned is required if you are using Garage as your S3 provider, as it does not have the ability for anonymous access. But basic links are prettier
-      - FFMPEG_LOG_ENABLED=false #For seeing console log output of FFMPEG, final output log is already shown on the preview page.
-      - STARTUP_SCAN_LOG_ENABLED=false #For seeing console log output of the directory scan process
-    image: jermanoid/jclipper:latest
-    ports:
-      - "5000:5000"
-    restart: unless-stopped
-    volumes:
-      - /path/to/movies:/movies:ro  #Movies directory
-      - /path/to/tv_shows:/tv:ro    #TV shows directory (Show/Season/episode structure)
-      - /path/to/output_clips:/output #Output directory
-```
+
+Using Docker Compose:
+
+1. Copy the sample config and edit it for your setup:
+   ```bash
+   cp .env.sample .env
+   ```
+   Set at least `SECRET_KEY` (a long random string). Optionally set the `S3_*` values to enable uploads.
+
+2. Copy the sample compose file and set your volume paths:
+   ```bash
+   cp docker-compose-sample.yml docker-compose.yml
+   ```
+   Point the `volumes` at your host directories.
+
+3. Start the container:
+   ```bash
+   docker compose up -d
+   ```
+   The app will be accessible at `http://[server IP]:5000`.
+
+All configuration lives in `.env` (loaded via `env_file`). Key values:
+- `MOVIES_DIR`, `TV_SHOWS_DIR`, `OUTPUT_DIR` — paths inside the container; map your host dirs to these in the compose `volumes`
+- `SECRET_KEY` — required, set to a long random string
+- `S3_*` — enable S3 upload (leave blank to disable); `S3_LINK_FORMAT` is `basic` or `presigned` (use `presigned` for S3-compatible stores without anonymous read access, e.g. Garage)
+- `EXCLUDED_FOLDERS` — comma-separated folder names to skip when scanning (e.g. `@eaDir` on Synology)
+- `FFMPEG_LOG_ENABLED`, `STARTUP_SCAN_LOG_ENABLED` — set to `false` to reduce console noise
 
 #### Select Movie or TV show workflow from the home page
 
 #### Select your movie or tv show season>episode
-The home page should show a list of your movie files if they've been mapped correctly. The app has been programmed to search recursively through the /movies folder for the common extensions listed in the VIDEO_EXTENSIONS environment variable.
+The home page should show a list of your movie files if they've been mapped correctly. The app has been programmed to search recursively through the /movies folder for the common extensions listed in the VIDEO_EXTENSIONS environment variable. Any folders listed in the EXCLUDED_FOLDERS environment variable are skipped during the scan, which is useful for hiding NAS metadata folders (e.g. @eaDir on Synology) that show up in your library.
 Select a valid movie to proceed to the subtitle page.
 
 Movies that don't contain a matching .srt file in the same movie folder will be colored greyed out, and present a red "subtitle file not found" tag. The .srt file name must match the movie file name, not including the extension or language signifier. (e.g. "en.srt" or "fr.srt")
@@ -80,7 +75,7 @@ This should show you a live preview of your video as well as the ability to down
 
 
 ### Roadmap
-- Add GPU encoding support
+- Add GPU encoding support for final clip output (preview encoding is already GPU-accelerated)
 - Interface for managing clips stored in your S3 bucket.
 
 ### Known Issues

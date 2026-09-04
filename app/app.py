@@ -7,10 +7,12 @@ import json
 import shutil
 import logging
 import re
+import time
+import hashlib
 from datetime import timedelta
-from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify, copy_current_request_context
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify, copy_current_request_context, Response
 import srt
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 import boto3
 
 # Define clean_movie_name before filter registration
@@ -22,6 +24,91 @@ def clean_movie_name(name):
         name = name[:pos]
     name = re.sub(r'\s+', ' ', name).strip()
     return name
+
+TIMESTAMP_RE = re.compile(r'^\d{2}-\d{2}-\d{2}\.\d{3}$')
+RES_RE = re.compile(r'^\d+x\d+(p\d+(?:\.\d+)?)?$')
+
+def parse_clip_basename(basename):
+    stem = os.path.splitext(basename)[0]
+    parts = stem.split('_')
+    if len(parts) >= 4 and parts[-3].lower() == 'to' and TIMESTAMP_RE.match(parts[-4]) and TIMESTAMP_RE.match(parts[-2]) and RES_RE.match(parts[-1]):
+        time_res = '_'.join(parts[-4:])
+        movie_parts = parts[:-4]
+    else:
+        idx = next((i for i, part in enumerate(parts) if TIMESTAMP_RE.match(part)), None)
+        if idx is not None:
+            time_res = '_'.join(parts[idx:])
+            movie_parts = parts[:idx]
+        elif parts and RES_RE.match(parts[-1]):
+            time_res = parts[-1]
+            movie_parts = parts[:-1]
+        else:
+            time_res = ''
+            movie_parts = parts
+    while movie_parts and re.fullmatch(r'\d{4}', movie_parts[-1]):
+        movie_parts.pop()
+    movie_name = clean_movie_name(' '.join(movie_parts))
+    return {'movie': movie_name or 'Video Clip', 'time_res': time_res}
+
+# Quality/codec tags that mark the start of the "technical" portion of a TV
+# episode filename. The episode title is everything before the first such tag.
+QUALITY_TAG_RE = re.compile(
+    r'(?:^|[.\s\-_])'
+    r'(?:'
+    r'\d{3,4}p'
+    r'|4k'
+    r'|web[\s.\-]?dl'
+    r'|web[\s.\-]?rip'
+    r'|web'
+    r'|hulu'
+    r'|amzn'
+    r'|netflix'
+    r'|bluray'
+    r'|blu[\s.\-]?ray'
+    r'|bdremux'
+    r'|bdrip'
+    r'|hdtv'
+    r'|dvd'
+    r'|ddp?[\d.]+'
+    r'|eac3'
+    r'|aac'
+    r'|ac3'
+    r'|opus'
+    r'|h[\s.\-]?26[45]'
+    r'|hevc'
+    r'|x26[45]'
+    r'|av1'
+    r')',
+    re.IGNORECASE
+)
+
+def tv_episode_display_name(video):
+    """Return a display name for a TV episode: 'Show - SXXEXX - Title'.
+
+    The show name comes from the show folder; the episode code (S01E02 / 1x18)
+    and title are parsed from the filename. Returns None when the video is not
+    under a TV shows dir or has no episode code, so callers can fall back to
+    the movie behavior.
+    """
+    if not video:
+        return None
+    tv_root = next((root for root in TV_SHOWS_DIRS if os.path.abspath(video).startswith(os.path.abspath(root) + os.sep)), None)
+    if not tv_root:
+        return None
+    show_name = os.path.basename(os.path.dirname(os.path.dirname(video)))
+    stem = os.path.splitext(os.path.basename(video))[0]
+    ep_code_match = re.search(r'(S\d+E\d+|\d+x\d+)', stem, re.IGNORECASE)
+    if not ep_code_match:
+        return None
+    ep_code = ep_code_match.group(0).upper()
+    rest = stem[ep_code_match.end():]
+    tag_match = QUALITY_TAG_RE.search(rest)
+    title = rest[:tag_match.start()] if tag_match else rest
+    title = re.sub(r'[.\s\-_]+', ' ', title).strip()
+    title = re.sub(r'\s+', ' ', title)
+    if title:
+        return f"{show_name} - {ep_code} - {title}"
+    return f"{show_name} - {ep_code}"
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
@@ -37,14 +124,16 @@ app.jinja_env.filters['split'] = lambda value, delimiter: value.split(delimiter)
 app.jinja_env.filters['regex_match'] = lambda value, pattern: bool(re.match(pattern, value))
 app.jinja_env.filters['regex_replace'] = lambda value, pattern, replacement: re.sub(pattern, replacement, value)
 app.jinja_env.filters['clean_movie_name'] = clean_movie_name
+app.jinja_env.filters['parse_clip_name'] = lambda value: parse_clip_basename(value)['movie']
 
 # Environment variables
 MOVIES_DIR = os.getenv('MOVIES_DIR', '/movies')
-TV_SHOWS_DIR = os.getenv('TV_SHOWS_DIR', '/tv')
+TV_SHOWS_DIRS = [os.path.abspath(p.strip()) for p in os.getenv('TV_SHOWS_DIRS', os.getenv('TV_SHOWS_DIR', '/tv')).split(',') if p.strip()]
 OUTPUT_DIR = os.getenv('OUTPUT_DIR', '/output')
 TEMP_DIR = os.getenv('TEMP_DIR', '/tmp/jclipper')
 DEFAULT_LANGUAGE = os.getenv('DEFAULT_LANGUAGE', 'en')
 VIDEO_EXTS = os.getenv('VIDEO_EXTENSIONS', 'mp4,mkv,avi,mov,wmv,flv').split(',')
+EXCLUDED_FOLDERS = {p.strip().lower() for p in os.getenv('EXCLUDED_FOLDERS', '').split(',') if p.strip()}
 PREVIEW_RESOLUTION = os.getenv('PREVIEW_RESOLUTION', '1280x720')
 S3_ENDPOINT = os.getenv('S3_ENDPOINT')
 S3_REGION = os.getenv('S3_REGION')
@@ -54,7 +143,30 @@ S3_SECRET = os.getenv('S3_SECRET')
 FFMPEG_LOG_ENABLED = os.getenv('FFMPEG_LOG_ENABLED', 'true').lower() == 'true'
 STARTUP_SCAN_LOG_ENABLED = os.getenv('STARTUP_SCAN_LOG_ENABLED', 'true').lower() == 'true'
 S3_ENABLED = all([S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_KEY, S3_SECRET])
-AVAILABLE_FORMATS = ['mp4', 'gif', 'mp3']
+AVAILABLE_FORMATS = ['mp4', 'gif', 'mp3', 'wav']
+
+# Browser-playable preview cache (for sources browsers can't play directly, e.g. MKV/HEVC)
+PREVIEW_CACHE_DIR = os.getenv('PREVIEW_CACHE_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview_cache'))
+PREVIEW_MAX_CACHE = int(os.getenv('PREVIEW_MAX_CACHE', '20'))
+PREVIEW_HEIGHT = int(os.getenv('PREVIEW_HEIGHT', '360'))
+# Padding (seconds) added around the selection when rendering a ranged preview,
+# so the user can fine-tune the in/out points without re-rendering.
+PREVIEW_PAD_SECONDS = int(os.getenv('PREVIEW_PAD_SECONDS', '15'))
+
+def _detect_nvenc():
+    """Check whether the ffmpeg on PATH can encode with the GPU (NVENC)."""
+    if not os.path.exists('/dev/nvidia0'):
+        return False
+    try:
+        out = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             text=True, timeout=30).stdout
+        return 'h264_nvenc' in out
+    except Exception:
+        return False
+
+# GPU preview encoding (NVENC). Clip encoding always stays on software encoding.
+NVENC_AVAILABLE = _detect_nvenc()
 
 # Tracks active ffmpeg Popen objects by temp_job_dir so cancel_encoding can terminate them
 active_processes = {}
@@ -67,11 +179,14 @@ STARTUP_ID = uuid.uuid4().hex
 app.logger.info(f"S3 Config: ENDPOINT={S3_ENDPOINT}, REGION={S3_REGION}, BUCKET={S3_BUCKET}, KEY={'set' if S3_KEY else 'unset'}, SECRET={'set' if S3_SECRET else 'unset'}")
 app.logger.info(f"S3 Enabled: {all([S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_KEY, S3_SECRET])}")
 app.logger.info(f"FFmpeg Logging Enabled: {FFMPEG_LOG_ENABLED}")
+app.logger.info(f"NVENC (GPU preview encoding) available: {NVENC_AVAILABLE}")
 app.logger.info(f"Startup Scan Logging Enabled: {STARTUP_SCAN_LOG_ENABLED}")
+app.logger.info(f"Excluded Folders: {sorted(EXCLUDED_FOLDERS) if EXCLUDED_FOLDERS else 'none'}")
 
 # Ensure directories exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(PREVIEW_CACHE_DIR, exist_ok=True)
 if STARTUP_SCAN_LOG_ENABLED:
     app.logger.info(f"Startup: OUTPUT_DIR {OUTPUT_DIR} exists with contents: {os.listdir(OUTPUT_DIR)}")
     app.logger.info(f"Startup: TEMP_DIR {TEMP_DIR} exists with contents: {os.listdir(TEMP_DIR)}")
@@ -113,6 +228,7 @@ def find_srt_for_video(video_base, srts, root):
 # Cache movies on startup
 movies = []
 for root, dirs, files in os.walk(MOVIES_DIR):
+    dirs[:] = [d for d in dirs if d.lower() not in EXCLUDED_FOLDERS]
     videos = [f for f in files if any(f.lower().endswith('.' + ext) for ext in VIDEO_EXTS)]
     srts = [f for f in files if f.lower().endswith('.srt')]
     for video in videos:
@@ -127,15 +243,22 @@ if STARTUP_SCAN_LOG_ENABLED:
     for m in movies:
         app.logger.info(f"Movie: {m['name']}, SRT: {m['srt']}, Video: {m['video']}")
 
-# Cache TV shows on startup: TV_SHOWS_DIR / show / season / episode
+# Cache TV shows on startup: TV_SHOWS_DIRS / show / season / episode
 tv_shows = []
-if os.path.isdir(TV_SHOWS_DIR):
-    for show_name in sorted(os.listdir(TV_SHOWS_DIR)):
-        show_path = os.path.join(TV_SHOWS_DIR, show_name)
+for root in TV_SHOWS_DIRS:
+    if not os.path.isdir(root):
+        continue
+    root_slug = root.lstrip('/')
+    for show_name in sorted(os.listdir(root)):
+        if show_name.lower() in EXCLUDED_FOLDERS:
+            continue
+        show_path = os.path.join(root, show_name)
         if not os.path.isdir(show_path):
             continue
         seasons = []
         for season_name in sorted(os.listdir(show_path)):
+            if season_name.lower() in EXCLUDED_FOLDERS:
+                continue
             season_path = os.path.join(show_path, season_name)
             if not os.path.isdir(season_path):
                 continue
@@ -150,10 +273,10 @@ if os.path.isdir(TV_SHOWS_DIR):
             if episodes:
                 seasons.append({'name': season_name, 'episodes': episodes})
         if seasons:
-            tv_shows.append({'name': show_name, 'seasons': seasons})
-    if STARTUP_SCAN_LOG_ENABLED:
-        for show in tv_shows:
-            app.logger.info(f"TV Show: {show['name']}, seasons: {[s['name'] for s in show['seasons']]}")
+            tv_shows.append({'root': root, 'root_slug': root_slug, 'name': show_name, 'seasons': seasons})
+if STARTUP_SCAN_LOG_ENABLED:
+    for show in tv_shows:
+        app.logger.info(f"TV Show: {show['root']} / {show['name']}, seasons: {[s['name'] for s in show['seasons']]}")
 
 def timedelta_to_srt(t):
     total_seconds = int(t.total_seconds())
@@ -180,7 +303,7 @@ def build_ffmpeg_base_cmd(video, start_sec, duration):
             '-ss', str(start_sec), '-i', video, '-t', str(duration)]
 
 def _clear_job_session():
-    for key in ('output', 'format', 'padding', 'scale_factor', 'temp_job_dir', 'audio_index', 'encoding_pid'):
+    for key in ('output', 'format', 'scale_factor', 'temp_job_dir', 'audio_index', 'encoding_pid', 'crf', 'preset', 'audio_bitrate'):
         session.pop(key, None)
     session.modified = True
 
@@ -231,6 +354,80 @@ def tv():
     app.logger.info("Serving TV Clipper page")
     return render_template('tv.html', tv_shows=tv_shows)
 
+@app.route('/tv/<root_slug>/seasons/<show_name>')
+def tv_seasons(root_slug, show_name):
+    app.logger.info(f"Serving TV seasons page for show: {root_slug}/{show_name}")
+    show = next((s for s in tv_shows if s['root_slug'] == root_slug and s['name'].lower() == show_name.lower()), None)
+    if not show:
+        app.logger.warning(f"Show not found: {root_slug}/{show_name}")
+        return redirect(url_for('tv'))
+    return render_template('tv_seasons.html', show=show, show_name=show_name, root_slug=root_slug)
+
+@app.route('/tv/<root_slug>/episodes/<show_name>/<season_name>')
+def tv_episodes(root_slug, show_name, season_name):
+    app.logger.info(f"Serving TV episodes page for show: {root_slug}/{show_name}, season: {season_name}")
+    show = next((s for s in tv_shows if s['root_slug'] == root_slug and s['name'].lower() == show_name.lower()), None)
+    if not show:
+        app.logger.warning(f"Show not found: {root_slug}/{show_name}")
+        return redirect(url_for('tv'))
+    season = next((s for s in show['seasons'] if s['name'].lower() == season_name.lower()), None)
+    if not season:
+        app.logger.warning(f"Season not found: {season_name} for show {root_slug}/{show_name}")
+        return redirect(url_for('tv_seasons', root_slug=root_slug, show_name=show_name))
+    return render_template('tv_episodes.html', show=show, season=season, show_name=show_name, season_name=season_name, root_slug=root_slug)
+
+@app.route('/search_subtitles')
+def search_subtitles():
+    root_slug = request.args.get('root')
+    show_name = request.args.get('show')
+    season_name = request.args.get('season')
+    back_url = request.args.get('back', url_for('tv'))
+    if not root_slug or not show_name:
+        app.logger.warning("No root/show provided for search_subtitles, redirecting to tv")
+        return redirect(url_for('tv'))
+    show = next((s for s in tv_shows if s['root_slug'] == root_slug and s['name'].lower() == show_name.lower()), None)
+    if not show:
+        app.logger.warning(f"Show not found: {root_slug}/{show_name}")
+        return redirect(url_for('tv'))
+    if season_name:
+        seasons = [s for s in show['seasons'] if s['name'].lower() == season_name.lower()]
+    else:
+        seasons = show['seasons']
+    season_groups = []
+    for season in seasons:
+        episode_groups = []
+        for ep in season['episodes']:
+            if not ep.get('has_srt') or not ep.get('srt'):
+                continue
+            ep_items = []
+            try:
+                with open(ep['srt'], 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                subs = list(srt.parse(content))
+                for sub in subs:
+                    ep_items.append({
+                        'start_str': timedelta_to_srt(sub.start),
+                        'end_str': timedelta_to_srt(sub.end),
+                        'content': sub.content.strip(),
+                    })
+            except Exception as e:
+                app.logger.error(f"Error reading SRT for {ep['video']}: {str(e)}")
+            if ep_items:
+                episode_groups.append({
+                    'name': ep['name'],
+                    'video': ep['video'],
+                    'items': ep_items,
+                })
+        if episode_groups:
+            season_groups.append({
+                'name': season['name'],
+                'episodes': episode_groups,
+            })
+    title = f"{show['root_slug']} / {show['name']}"
+    if season_name:
+        title += f" - {season_name}"
+    return render_template('search_subtitles.html', seasons=season_groups, title=title, show_name=show_name, season_name=season_name, root_slug=root_slug, back_url=back_url)
+
 @app.route('/subtitles', methods=['GET', 'POST'])
 def subtitles():
     movie = request.args.get('movie')
@@ -271,10 +468,11 @@ def subtitles():
     else:
         app.logger.warning(f"No SRT file found for {movie}")
     movie_base = os.path.splitext(os.path.basename(movie))[0]
-    pretty_movie_name = clean_movie_name(movie_base)
+    pretty_movie_name = tv_episode_display_name(movie) or clean_movie_name(movie_base)
     app.logger.info(f"Passing pretty_movie_name: {pretty_movie_name} to subtitles.html")
     back_url = request.args.get('back', url_for('index'))
-    return render_template('subtitles.html', subs=subs, movie=movie, pretty_movie_name=pretty_movie_name, back_url=back_url)
+    search_query = request.args.get('q', '').strip()
+    return render_template('subtitles.html', subs=subs, movie=movie, pretty_movie_name=pretty_movie_name, back_url=back_url, search_query=search_query)
 
 @app.route('/output', methods=['GET', 'POST'])
 def output():
@@ -332,7 +530,7 @@ def output():
     
     app.logger.info(f"Session in output before check: {session}")
     movie_base = os.path.splitext(os.path.basename(video))[0]
-    pretty_movie_name = clean_movie_name(movie_base)
+    pretty_movie_name = tv_episode_display_name(video) or clean_movie_name(movie_base)
     app.logger.info(f"Passing pretty_movie_name: {pretty_movie_name} to output.html")
     return render_template('output.html',
                           original_res=res,
@@ -347,7 +545,7 @@ def output():
                           audio_index=audio_index,
                           pretty_movie_name=pretty_movie_name)
 
-def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index):
+def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf=23, preset='veryfast', audio_bitrate='192k'):
     with app.app_context():
         encoding_file = os.path.join(temp_job_dir, 'encoding')
         log_file = os.path.join(temp_job_dir, 'log.txt')
@@ -356,7 +554,12 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
         base_cmd = build_ffmpeg_base_cmd(video, start_sec, duration)
         if format == 'mp3':
             main_cmd = base_cmd + [
-                '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', '192k', '-ac', '2',
+                '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', audio_bitrate, '-ac', '2',
+                '-threads', '4', output_file
+            ]
+        elif format == 'wav':
+            main_cmd = base_cmd + [
+                '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'pcm_s16le', '-ac', '2',
                 '-threads', '4', output_file
             ]
         elif format == 'gif':
@@ -372,7 +575,7 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
             video_codec = 'libx264'
             audio_codec = 'aac'
             main_cmd = base_cmd + [
-                '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-preset', 'veryfast', '-c:a', audio_codec, '-b:a', '192k', '-ac', '2',
+                '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-crf', str(crf), '-preset', preset, '-c:a', audio_codec, '-b:a', audio_bitrate, '-ac', '2',
                 '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p'
             ]
             if scale_filter:
@@ -401,7 +604,7 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
         stdout = '\n'.join(stdout_lines)
         stderr = '\n'.join(stderr_lines)
         ffmpeg_output = f"stdout: {stdout}\nstderr: {stderr}\nreturncode: {process.returncode}"
-        if format != 'mp3' and process.returncode == 0 and os.path.exists(output_file):
+        if format not in ('mp3', 'wav') and process.returncode == 0 and os.path.exists(output_file):
             probe_cmd = ['ffprobe', '-err_detect', 'ignore_err', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', output_file]
             try:
                 res_out = subprocess.check_output(probe_cmd, text=True).strip()
@@ -437,21 +640,23 @@ def generate():
     end_str = request.form.get('end')
     video = request.form.get('video')
     format = request.form.get('format', 'mp4')
-    padding = float(request.form.get('padding', 0))
     scale_factor = float(request.form.get('scale_factor', 1.0))
     audio_index = request.form.get('audio_index', '0')
+    crf = int(request.form.get('crf', 23))
+    preset = request.form.get('preset', 'veryfast')
+    audio_bitrate = request.form.get('audio_bitrate', '192k')
     # Remove direct resolution parsing from form; calculate from scale_factor
     # res_str = request.form.get('resolution', '1920x1080')
     # scaled_width, scaled_height = map(int, res_str.split('x'))
-    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, padding={padding}, scale_factor={scale_factor}, audio_index={audio_index}")
+    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, scale_factor={scale_factor}, audio_index={audio_index}, crf={crf}, preset={preset}, audio_bitrate={audio_bitrate}")
     if not all([start_str, end_str, video]):
         app.logger.warning(f"Missing required params in generate: start={start_str}, end={end_str}, video={video}")
         return jsonify({'error': 'Missing required parameters'}), 400
     try:
         start_td = timedelta_from_str(start_str)
         end_td = timedelta_from_str(end_str)
-        start_sec = max(0, start_td.total_seconds() - padding)
-        duration = (end_td.total_seconds() + padding) - start_sec
+        start_sec = max(0, start_td.total_seconds())
+        duration = end_td.total_seconds() - start_sec
         app.logger.info(f"Calculated start_sec: {start_sec}, duration: {duration}")
         if duration <= 0:
             app.logger.error("Calculated duration is zero or negative, falling back to 10 seconds")
@@ -460,7 +665,8 @@ def generate():
         app.logger.error(f"Error parsing timestamps: {str(e)} - Falling back to 10 seconds")
         start_sec = 0
         duration = 10.0
-    if TV_SHOWS_DIR and os.path.abspath(video).startswith(os.path.abspath(TV_SHOWS_DIR) + os.sep):
+    tv_root = next((root for root in TV_SHOWS_DIRS if os.path.abspath(video).startswith(os.path.abspath(root) + os.sep)), None)
+    if tv_root:
         show_name = os.path.basename(os.path.dirname(os.path.dirname(video)))
         episode_stem = os.path.splitext(os.path.basename(video))[0]
         # Extract just the season/episode code (S01E05 or 1x02) for a clean output name.
@@ -484,8 +690,7 @@ def generate():
     scaled_width = scaled_width if scaled_width % 2 == 0 else scaled_width - 1
     scaled_height = scaled_height if scaled_height % 2 == 0 else scaled_height - 1
     app.logger.info(f"Calculated scaled resolution: {scaled_width}x{scaled_height}")
-    padding_str = f"p{padding}" if padding > 0 else ""
-    safe_filename = f"{movie_name}_{start_time}_to_{end_time}_{scaled_width}x{scaled_height}{padding_str}.{format}"
+    safe_filename = f"{movie_name}_{start_time}_to_{end_time}_{scaled_width}x{scaled_height}.{format}"
     output_file = os.path.join(OUTPUT_DIR, safe_filename)
     
     # Create per-job temp dir
@@ -499,10 +704,12 @@ def generate():
     session['movie'] = video
     session['output'] = output_file
     session['format'] = format
-    session['padding'] = padding
     session['scale_factor'] = scale_factor
     session['temp_job_dir'] = temp_job_dir
     session['audio_index'] = audio_index
+    session['crf'] = crf
+    session['preset'] = preset
+    session['audio_bitrate'] = audio_bitrate
     session.modified = True
     app.logger.info(f"Preserved session in generate: {session}")
 
@@ -512,7 +719,7 @@ def generate():
     open(os.path.join(temp_job_dir, 'encoding'), 'w').close()
 
     # Start main encode in background; output page polls /status until complete
-    threading.Thread(target=copy_current_request_context(encode_main), args=(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index), daemon=True).start()
+    threading.Thread(target=copy_current_request_context(encode_main), args=(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf, preset, audio_bitrate), daemon=True).start()
     return jsonify({'status': 'encoding'})
 
 @app.route('/preview', methods=['GET'])
@@ -562,7 +769,7 @@ def preview():
             main_status = 'success' if os.path.exists(output) else 'failure'
             encoding_done = True
         app.logger.info(f"output: {output}, exists: {os.path.exists(output)}, main_status: {main_status}")
-        movie_name = os.path.splitext(os.path.basename(video))[0] if video else 'Video Clip'
+        movie_name = tv_episode_display_name(video) or (os.path.splitext(os.path.basename(video))[0] if video else 'Video Clip')
 
     app.logger.info(f"Preview context: output={output}, encoding_done={encoding_done}, main_status={main_status}, from_history={from_history}")
     s3_enabled = S3_ENABLED
@@ -612,11 +819,16 @@ def download():
 
 @app.route('/upload_s3')
 def upload_s3():
-    output = session.get('output')
+    file_param = request.args.get('file')
+    if file_param and file_param.startswith(OUTPUT_DIR) and os.path.isfile(file_param):
+        output = file_param
+        format = os.path.splitext(output)[1][1:].lower() or 'mp4'
+    else:
+        output = session.get('output')
+        format = session.get('format', 'mp4')
     if not output or not os.path.exists(output):
         return jsonify({'success': False, 'message': 'No file to upload'})
-    format = session.get('format', 'mp4')
-    mime_type = 'video/mp4' if format == 'mp4' else 'image/gif' if format == 'gif' else 'audio/mpeg' if format == 'mp3' else 'application/octet-stream'
+    mime_type = 'video/mp4' if format == 'mp4' else 'image/gif' if format == 'gif' else 'audio/mpeg' if format == 'mp3' else 'audio/wav' if format == 'wav' else 'application/octet-stream'
     link_format = os.getenv('S3_LINK_FORMAT', 'presigned').lower()
     try:
         s3 = boto3.client('s3', endpoint_url=S3_ENDPOINT, aws_access_key_id=S3_KEY, aws_secret_access_key=S3_SECRET, region_name=S3_REGION)
@@ -780,6 +992,244 @@ def clear_all():
     else:
         return jsonify({'success': False, 'message': 'Some files or directories failed to delete'})
 
+# ===== Browser-playable preview generation (for sources like MKV/HEVC) =====
+_preview_lock = threading.Lock()
+_preview_status = {}  # cache_key -> {'state': 'generating'|'ready'|'error', 'error': str}
+_preview_progress = {}  # cache_key -> {'pct': 0-100, 'encoder': 'gpu'|'cpu'|'copy'|None} while generating
+
+def _preview_path(key):
+    return os.path.join(PREVIEW_CACHE_DIR, key + '.mp4')
+
+def _preview_cache_key(source_path, start=None, duration=None):
+    st = os.stat(source_path)
+    raw = f"{source_path}|{st.st_size}|{int(st.st_mtime)}"
+    if start is not None and duration is not None:
+        raw += f"|{start:.3f}|{duration:.3f}"
+    return hashlib.md5(raw.encode('utf-8')).hexdigest()
+
+def _probe_codec(path, stream_type):
+    cmd = ['ffprobe', '-v', 'error', '-select_streams', stream_type + ':0',
+           '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1', path]
+    try:
+        out = subprocess.check_output(cmd, text=True, timeout=30).strip()
+        return out.split('\n')[0].strip().lower() if out else ''
+    except Exception as e:
+        app.logger.error(f"ffprobe codec probe failed for {path} ({stream_type}): {e}")
+        return ''
+
+def _probe_duration(path):
+    cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+           '-of', 'default=noprint_wrappers=1:nokey=1', path]
+    try:
+        out = subprocess.check_output(cmd, text=True, timeout=30).strip()
+        return float(out.split('\n')[0])
+    except Exception as e:
+        app.logger.error(f"ffprobe duration probe failed for {path}: {e}")
+        return None
+
+def _run_ffmpeg_with_progress(cmd, key, duration, encoder=None):
+    """Run an ffmpeg command (with -progress pipe:1) and stream progress to _preview_progress[key] (0-100).
+
+    Progress is read from stdout (the -progress stream, which ffmpeg flushes live). stderr is
+    drained on a background thread (for error reporting) so a full stderr pipe can't deadlock us."""
+    with _preview_lock:
+        _preview_progress[key] = {'pct': 0, 'encoder': encoder}
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    err_chunks = []
+    def _drain_stderr():
+        try:
+            for line in iter(proc.stderr.readline, b''):
+                err_chunks.append(line)
+        finally:
+            proc.stderr.close()
+    drain_thread = threading.Thread(target=_drain_stderr, daemon=True)
+    drain_thread.start()
+    time_re = re.compile(rb'out_time=(\d+):(\d+):(\d+(?:\.\d+)?)')
+    try:
+        for raw in iter(proc.stdout.readline, b''):
+            m = time_re.search(raw)
+            if m and duration and duration > 0:
+                t = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+                with _preview_lock:
+                    _preview_progress[key] = {'pct': min(100, int(t / duration * 100)), 'encoder': encoder}
+    finally:
+        proc.stdout.close()
+    drain_thread.join(timeout=5)
+    rc = proc.wait()
+    if rc != 0:
+        err = b''.join(err_chunks)[-500:].decode('utf-8', 'replace')
+        raise RuntimeError(f"ffmpeg preview generation failed: {err}")
+
+def _generate_preview(source, dest, start=None, duration=None, key=None):
+    """Produce a browser-playable MP4 at dest. Stream-copy when possible, else transcode.
+
+    When start/duration are given, only that range is rendered (fast input seeking),
+    so large sources don't require a full-movie transcode just to preview a clip.
+    Transcoding prefers the GPU (NVENC) when available and falls back to libx264."""
+    vcodec = _probe_codec(source, 'v')
+    acodec = _probe_codec(source, 'a')
+    video_copy = (vcodec == 'h264')
+    audio_copy = acodec in ('aac', 'mp3')
+    if start is not None and duration is not None and duration > 0:
+        input_args = ['-ss', str(start), '-i', source, '-t', str(duration)]
+    else:
+        input_args = ['-i', source]
+        if duration is None:
+            duration = _probe_duration(source)
+    color_opts = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709']
+    audio_opts = ['-c:a', 'aac', '-b:a', '128k']
+    mp4_opts = ['-f', 'mp4', '-movflags', '+faststart']
+    if video_copy and audio_copy:
+        candidates = [('stream-copy', ['ffmpeg', '-y'] + input_args + ['-c', 'copy'] + mp4_opts)]
+    elif video_copy:
+        candidates = [('copy-video/aac-audio', ['ffmpeg', '-y'] + input_args + ['-c:v', 'copy'] + audio_opts + mp4_opts)]
+    else:
+        candidates = []
+        if NVENC_AVAILABLE:
+            candidates.append(('transcode-gpu', ['ffmpeg', '-y', '-hwaccel', 'cuda'] + input_args + [
+                '-vf', f'scale=-2:{PREVIEW_HEIGHT},format=yuv420p',
+                '-c:v', 'h264_nvenc', '-preset', 'p1', '-cq', '30'] + color_opts + audio_opts + mp4_opts))
+        candidates.append(('transcode', ['ffmpeg', '-y'] + input_args + [
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
+            '-vf', f'scale=-2:{PREVIEW_HEIGHT},format=yuv420p'] + color_opts + audio_opts + mp4_opts))
+    tmp = dest + '.tmp'
+    last_err = None
+    mode = None
+    encoder_map = {'stream-copy': 'copy', 'copy-video/aac-audio': 'copy', 'transcode-gpu': 'gpu', 'transcode': 'cpu'}
+    for m, cmd in candidates:
+        app.logger.info(f"Generating preview ({m}, start={start}, duration={duration}) for {source}")
+        try:
+            _run_ffmpeg_with_progress(cmd + ['-progress', 'pipe:1', tmp], key, duration, encoder_map.get(m))
+            mode = m
+            break
+        except RuntimeError as e:
+            last_err = e
+            if m == 'transcode-gpu':
+                app.logger.warning(f"GPU preview render failed, falling back to CPU encoding: {e}")
+            else:
+                raise
+    if mode is None:
+        raise last_err
+    os.replace(tmp, dest)
+    app.logger.info(f"Preview ready ({mode}): {dest}")
+
+def _do_generate_preview(source, key, start=None, duration=None):
+    dest = _preview_path(key)
+    _sanitize_preview_cache()
+    max_attempts = 3
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            _generate_preview(source, dest, start, duration, key)
+            with _preview_lock:
+                _preview_status[key] = {'state': 'ready'}
+                _preview_progress.pop(key, None)
+            _cleanup_preview_cache()
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts:
+                delay = 2 * attempt
+                app.logger.warning(f"Preview generation attempt {attempt}/{max_attempts} failed for {source}: {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+    app.logger.error(f"Preview generation failed after {max_attempts} attempts for {source}: {last_err}")
+    with _preview_lock:
+        _preview_status[key] = {'state': 'error', 'error': str(last_err)}
+        _preview_progress.pop(key, None)
+
+def _sanitize_preview_cache():
+    """Remove stale/partial files from the dedicated preview cache dir before a new render."""
+    try:
+        for f in os.listdir(PREVIEW_CACHE_DIR):
+            if f.endswith('.tmp'):
+                os.remove(os.path.join(PREVIEW_CACHE_DIR, f))
+                app.logger.info(f"Removed stale preview temp file: {f}")
+    except Exception as e:
+        app.logger.error(f"Preview cache sanitize failed: {e}")
+
+def _cleanup_preview_cache():
+    """Keep only the PREVIEW_MAX_CACHE most recent preview files."""
+    try:
+        files = [os.path.join(PREVIEW_CACHE_DIR, f) for f in os.listdir(PREVIEW_CACHE_DIR) if f.endswith('.mp4')]
+        files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        for p in files[PREVIEW_MAX_CACHE:]:
+            os.remove(p)
+            app.logger.info(f"Cleaned up old preview: {p}")
+    except Exception as e:
+        app.logger.error(f"Preview cache cleanup failed: {e}")
+
+@app.route('/preview-source')
+def preview_source():
+    file = request.args.get('file')
+    if not file or not os.path.exists(file):
+        return jsonify({'status': 'error', 'message': 'Source file not found'}), 404
+
+    # Parse the requested selection (HH:MM:SS) so we can render just that range + padding
+    start_sec = None
+    end_sec = None
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+    if start_str and end_str:
+        try:
+            start_sec = max(0.0, timedelta_from_str(start_str).total_seconds())
+            end_sec = timedelta_from_str(end_str).total_seconds()
+            if end_sec <= start_sec:
+                start_sec = None
+                end_sec = None
+        except Exception:
+            start_sec = None
+            end_sec = None
+
+    # If the source is already a browser-playable MP4, serve it directly (free scrubbing, offset 0)
+    if file.lower().endswith('.mp4'):
+        if _probe_codec(file, 'v') == 'h264' and _probe_codec(file, 'a') in ('aac', 'mp3'):
+            return jsonify({'status': 'ready', 'url': '/serve?file=' + quote(file), 'offset': 0})
+
+    # Non-browser-playable source: render only the selection + padding (fast) instead of the whole movie
+    pad_str = request.args.get('pad')
+    pad_seconds = PREVIEW_PAD_SECONDS
+    if pad_str:
+        try:
+            pad_seconds = max(0, int(pad_str))
+        except (ValueError, TypeError):
+            pad_seconds = PREVIEW_PAD_SECONDS
+
+    if start_sec is not None and end_sec is not None:
+        render_start = max(0.0, start_sec - pad_seconds)
+        render_duration = (end_sec + pad_seconds) - render_start
+        offset = render_start
+        key = _preview_cache_key(file, render_start, render_duration)
+    else:
+        render_start = None
+        render_duration = None
+        offset = 0
+        key = _preview_cache_key(file)
+
+    retry = request.args.get('retry') == '1'
+    dest = _preview_path(key)
+    with _preview_lock:
+        if os.path.exists(dest):
+            return jsonify({'status': 'ready', 'url': f'/preview-file/{key}', 'offset': offset})
+        st = _preview_status.get(key)
+        if st and st['state'] == 'generating':
+            prog = _preview_progress.get(key) or {'pct': 0, 'encoder': None}
+            return jsonify({'status': 'generating', 'progress': prog.get('pct', 0), 'encoder': prog.get('encoder')})
+        if st and st['state'] == 'error' and not retry:
+            return jsonify({'status': 'error', 'message': st.get('error', 'preview generation failed')}), 500
+        _preview_status[key] = {'state': 'generating'}
+        _preview_progress[key] = {'pct': 0, 'encoder': None}
+        threading.Thread(target=_do_generate_preview, args=(file, key, render_start, render_duration), daemon=True).start()
+    return jsonify({'status': 'generating', 'progress': 0, 'encoder': None})
+
+@app.route('/preview-file/<key>')
+def preview_file(key):
+    if not re.fullmatch(r'[0-9a-f]{32}', key or ''):
+        return 'Bad key', 400
+    dest = _preview_path(key)
+    if os.path.exists(dest):
+        return send_file(dest, mimetype='video/mp4', conditional=True)
+    return 'Preview not ready', 404
+
 @app.route('/serve')
 def serve():
     file = request.args.get('file')
@@ -789,6 +1239,7 @@ def serve():
             'video/mp4' if file.endswith('.mp4') else
             'image/gif' if file.endswith('.gif') else
             'audio/mpeg' if file.endswith('.mp3') else
+            'audio/wav' if file.endswith('.wav') else
             'application/octet-stream'
         )
         app.logger.info(f"Serving file: {file} with MIME type: {mime_type}, exists: {os.path.exists(file)}, size: {os.path.getsize(file) if os.path.exists(file) else 0}")
@@ -818,6 +1269,7 @@ def s3_proxy(filename):
             'video/mp4' if filename.endswith('.mp4') else
             'image/gif' if filename.endswith('.gif') else
             'audio/mpeg' if filename.endswith('.mp3') else
+            'audio/wav' if filename.endswith('.wav') else
             'application/octet-stream'
         )
         content_length = s3_response['ContentLength']

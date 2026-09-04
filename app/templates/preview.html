@@ -45,12 +45,18 @@
                 <i class="fas fa-download"></i>
             </button>
             {% if s3_enabled %}
-            <button id="share-btn" onclick="shareVideo()" class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Share">
+            <button id="share-btn" onclick="shareVideo()" class="share-file-btn bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Share video">
                 <i class="fas fa-share-alt"></i>
+            </button>
+            <button id="copy-link-btn" onclick="copyLink()" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors flex items-center {% if main_status != 'success' %}bg-gray-300 cursor-not-allowed dark:bg-gray-600 pointer-events-none{% endif %}" {% if main_status != 'success' %}disabled{% endif %} title="Copy Link">
+                <i class="fas fa-link"></i>
             </button>
             {% else %}
             <button id="share-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center" disabled title="Sharing is disabled because S3 is not configured">
                 <i class="fas fa-share-alt"></i>
+            </button>
+            <button id="copy-link-btn" class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center" disabled title="Copy Link is disabled because S3 is not configured">
+                <i class="fas fa-link"></i>
             </button>
             {% endif %}
             {% if from_history %}
@@ -103,34 +109,92 @@
         }
     }
 
-    function shareVideo() {
-        const title = "{{ movie_name | default('Video Clip') }}";
-        const text = "Check out this video clip from Jclipper!";
-        {% if s3_enabled %}
-        fetch('/upload_s3{% if from_history %}?file={{ output | urlencode }}{% endif %}')
+    // Upload the clip to S3 and resolve with the public URL.
+    function getS3Url() {
+        return fetch('/upload_s3{% if from_history %}?file={{ output | urlencode }}{% endif %}')
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    if (navigator.share) {
-                        navigator.share({ title: title, text: text, url: data.url })
-                            .catch(err => {
-                                navigator.clipboard.writeText(data.url).then(() => {
-                                    alert('Share not supported. Video link copied to clipboard!');
-                                });
-                            });
-                    } else {
-                        navigator.clipboard.writeText(data.url).then(() => {
-                            alert('Share not supported. Video link copied to clipboard!');
-                        });
-                    }
-                } else {
-                    alert('S3 upload failed: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('S3 upload error:', error);
-                alert('S3 upload failed.');
+                if (!data.success) throw new Error(data.message || 'S3 upload failed');
+                return data.url;
             });
+    }
+
+    function copyToClipboard(url) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Video link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy the link manually:', url);
+            });
+        } else {
+            prompt('Copy the link manually:', url);
+        }
+    }
+
+    // Copy the public S3 link to the clipboard.
+    function copyLink() {
+        const btn = document.getElementById('copy-link-btn');
+        if (btn) btn.disabled = true;
+        getS3Url()
+            .then(url => {
+                if (btn) btn.disabled = false;
+                copyToClipboard(url);
+            })
+            .catch(err => {
+                if (btn) btn.disabled = false;
+                alert('S3 upload failed: ' + (err.message || 'Unknown error'));
+            });
+    }
+
+    function shareVideo() {
+        const title = "{{ movie_name | default('Video Clip') }}";
+        const filePath = "{{ output }}";
+        const serveUrl = "{{ url_for('serve', file=output) }}";
+        const fileName = filePath.split('/').pop();
+
+        function shareLink() {
+            getS3Url()
+                .then(url => {
+                    if (navigator.share) {
+                        navigator.share({ title: title, url: url }).catch(() => copyToClipboard(url));
+                    } else {
+                        copyToClipboard(url);
+                    }
+                })
+                .catch(err => {
+                    console.error('S3 upload error:', err);
+                    alert('S3 upload failed: ' + (err.message || 'Unknown error'));
+                });
+        }
+
+        function shareViaFile() {
+            fetch(serveUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to fetch video');
+                    return response.blob();
+                })
+                .then(blob => {
+                    const file = new File([blob], fileName, { type: blob.type || 'video/mp4' });
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        navigator.share({ files: [file], title: title }).catch(err => {
+                            console.log('Share cancelled or failed:', err);
+                        });
+                    } else {
+                        shareLink();
+                    }
+                })
+                .catch(err => {
+                    console.error('File share failed, falling back to link:', err);
+                    shareLink();
+                });
+        }
+
+        {% if s3_enabled %}
+        if (navigator.canShare) {
+            shareViaFile();
+        } else {
+            shareLink();
+        }
         {% else %}
         alert('Sharing is not available because S3 is not configured.');
         {% endif %}

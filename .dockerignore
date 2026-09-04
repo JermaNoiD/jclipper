@@ -1,0 +1,8 @@
+@eaDir
+\@eaDir
+*.log
+*.pyc
+__pycache__/
+__pycache__
+tests/
+.git/

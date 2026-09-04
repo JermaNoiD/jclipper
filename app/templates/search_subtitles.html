@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+
+{% block title %}Jclipper - Search Subtitles{% endblock %}
+
+{% block content %}
+<nav class="bg-gray-100 dark:bg-gray-900 border-b border-gray-300 dark:border-gray-700 py-3 px-4">
+    <div class="container mx-auto">
+        <div class="flex justify-center">
+            <input type="text" id="searchInput" class="w-full max-w-md p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600" placeholder="Search subtitles across episodes..." oninput="handleSearchInput()">
+        </div>
+    </div>
+</nav>
+
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <h1 class="text-3xl font-bold mb-6 text-center text-gray-900 dark:text-white">{{ title }}</h1>
+
+    <div class="bg-white dark:bg-gray-800 rounded-b-lg border border-gray-300 dark:border-gray-700 shadow p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar transition-colors duration-200">
+        {% if seasons %}
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Season
+                    <select id="seasonSelect" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600" onchange="onSeasonChange()"></select>
+                </label>
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Episode
+                    <select id="episodeSelect" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600" onchange="onEpisodeChange()"></select>
+                </label>
+            </div>
+            <span id="matchCount" class="text-sm text-gray-500 dark:text-gray-400"></span>
+        </div>
+        <ul id="subtitleList" class="space-y-2"></ul>
+        {% else %}
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+            <p>No subtitles found for this selection.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="mt-4 flex justify-center">
+        <a href="{{ back_url }}" class="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i> Back
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    const DATA = {{ seasons | tojson }};
+
+    const seasonSelect = document.getElementById('seasonSelect');
+    const episodeSelect = document.getElementById('episodeSelect');
+    const subtitleList = document.getElementById('subtitleList');
+    const matchCount = document.getElementById('matchCount');
+    const searchInput = document.getElementById('searchInput');
+
+    let currentSeason = '';
+    let currentEpisode = '';
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function highlightText(content, term) {
+        const escaped = escapeHtml(content);
+        if (!term) {
+            return escaped;
+        }
+
+        const lowerContent = content.toLowerCase();
+        const lowerTerm = term.toLowerCase();
+        let result = '';
+        let index = 0;
+        let matchIndex;
+
+        while ((matchIndex = lowerContent.indexOf(lowerTerm, index)) !== -1) {
+            result += escapeHtml(content.slice(index, matchIndex));
+            result += `<span class="highlight">${escapeHtml(content.slice(matchIndex, matchIndex + term.length))}</span>`;
+            index = matchIndex + term.length;
+        }
+
+        result += escapeHtml(content.slice(index));
+        return result;
+    }
+
+    function getSeason(seasonName) {
+        return DATA.find(season => season.name === seasonName);
+    }
+
+    function getEpisode(seasonName, episodeName) {
+        const season = getSeason(seasonName);
+        return season ? season.episodes.find(episode => episode.name === episodeName) : null;
+    }
+
+    function countMatches(items, term) {
+        if (!term) {
+            return items.length;
+        }
+        const lowerTerm = term.toLowerCase();
+        return items.filter(item => item.content.toLowerCase().includes(lowerTerm)).length;
+    }
+
+    function updateOptionLabels(term) {
+        if (!seasonSelect || !episodeSelect) {
+            return;
+        }
+
+        const lowerTerm = term.toLowerCase();
+
+        DATA.forEach(season => {
+            const seasonOption = Array.from(seasonSelect.options).find(option => option.value === season.name);
+            if (!seasonOption) {
+                return;
+            }
+
+            if (!lowerTerm) {
+                seasonOption.textContent = season.name;
+            } else {
+                const total = season.episodes.reduce((sum, episode) => sum + countMatches(episode.items, term), 0);
+                seasonOption.textContent = `${season.name} (${total})`;
+            }
+        });
+
+        const season = getSeason(currentSeason);
+        if (!season) {
+            return;
+        }
+
+        Array.from(episodeSelect.options).forEach(option => {
+            const episode = season.episodes.find(item => item.name === option.value);
+            if (!episode) {
+                return;
+            }
+
+            if (!lowerTerm) {
+                option.textContent = episode.name;
+            } else {
+                const count = countMatches(episode.items, term);
+                option.textContent = `${episode.name} (${count})`;
+            }
+        });
+    }
+
+    function populateSeasons() {
+        if (!DATA.length) {
+            return;
+        }
+
+        seasonSelect.innerHTML = '';
+        DATA.forEach(season => {
+            const option = document.createElement('option');
+            option.value = season.name;
+            option.textContent = season.name;
+            seasonSelect.appendChild(option);
+        });
+
+        currentSeason = DATA[0].name;
+        seasonSelect.value = currentSeason;
+        populateEpisodes();
+    }
+
+    function populateEpisodes() {
+        const season = getSeason(currentSeason);
+        episodeSelect.innerHTML = '';
+
+        if (!season) {
+            return;
+        }
+
+        season.episodes.forEach(episode => {
+            const option = document.createElement('option');
+            option.value = episode.name;
+            option.textContent = episode.name;
+            episodeSelect.appendChild(option);
+        });
+
+        currentEpisode = season.episodes[0].name;
+        episodeSelect.value = currentEpisode;
+        updateOptionLabels(searchInput ? searchInput.value.trim() : '');
+        renderCurrentEpisode(searchInput ? searchInput.value.trim() : '');
+    }
+
+    function onSeasonChange() {
+        currentSeason = seasonSelect.value;
+        populateEpisodes();
+    }
+
+    function onEpisodeChange() {
+        currentEpisode = episodeSelect.value;
+        updateOptionLabels(searchInput ? searchInput.value.trim() : '');
+        renderCurrentEpisode(searchInput ? searchInput.value.trim() : '');
+    }
+
+    function setSeasonAndEpisode(seasonName, episodeName) {
+        currentSeason = seasonName;
+        seasonSelect.value = currentSeason;
+
+        const season = getSeason(currentSeason);
+        episodeSelect.innerHTML = '';
+
+        if (!season) {
+            return;
+        }
+
+        season.episodes.forEach(episode => {
+            const option = document.createElement('option');
+            option.value = episode.name;
+            option.textContent = episode.name;
+            episodeSelect.appendChild(option);
+        });
+
+        currentEpisode = episodeName;
+        episodeSelect.value = currentEpisode;
+        updateOptionLabels(searchInput ? searchInput.value.trim() : '');
+        renderCurrentEpisode(searchInput ? searchInput.value.trim() : '');
+    }
+
+    function renderCurrentEpisode(term) {
+        if (!subtitleList) {
+            return;
+        }
+
+        subtitleList.innerHTML = '';
+        const season = getSeason(currentSeason);
+        const episode = season ? season.episodes.find(item => item.name === currentEpisode) : null;
+
+        if (!episode) {
+            if (matchCount) {
+                matchCount.textContent = '';
+            }
+            return;
+        }
+
+        const lowerTerm = term.toLowerCase();
+        const items = lowerTerm
+            ? episode.items.filter(item => item.content.toLowerCase().includes(lowerTerm))
+            : episode.items;
+
+        if (matchCount) {
+            matchCount.textContent = lowerTerm
+                ? `${items.length} match${items.length === 1 ? '' : 'es'}`
+                : `${items.length} subtitle${items.length === 1 ? '' : 's'}`;
+        }
+
+        if (!items.length) {
+            subtitleList.innerHTML = '<li class="p-3 text-center text-gray-500 dark:text-gray-400">No matching subtitles</li>';
+            return;
+        }
+
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'subtitle-item p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition-colors flex';
+            li.dataset.video = episode.video;
+            li.dataset.content = item.content;
+            li.innerHTML = `
+                <div class="w-1/4 flex flex-col justify-center pr-2">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(item.start_str)}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">${escapeHtml(item.end_str)}</p>
+                </div>
+                <div class="subtitle-content flex-1 pl-4 border-l border-gray-300 dark:border-gray-600">
+                    <p class="text-gray-800 dark:text-gray-200">${highlightText(item.content, term)}</p>
+                </div>
+            `;
+            li.addEventListener('click', () => jumpToSubtitles(episode.video, item.content));
+            subtitleList.appendChild(li);
+        });
+
+        if (lowerTerm) {
+            const firstMatch = subtitleList.querySelector('.subtitle-item');
+            if (firstMatch) {
+                firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    }
+
+    function findFirstMatch(term) {
+        const lowerTerm = term.toLowerCase();
+        for (const season of DATA) {
+            for (const episode of season.episodes) {
+                const hasMatch = episode.items.some(item => item.content.toLowerCase().includes(lowerTerm));
+                if (hasMatch) {
+                    return {
+                        season: season.name,
+                        episode: episode.name,
+                    };
+                }
+            }
+        }
+        return null;
+    }
+
+    function handleSearchInput() {
+        const term = searchInput.value.trim();
+        updateOptionLabels(term);
+
+        if (!term) {
+            renderCurrentEpisode('');
+            return;
+        }
+
+        const first = findFirstMatch(term);
+        if (first) {
+            setSeasonAndEpisode(first.season, first.episode);
+        } else {
+            if (matchCount) {
+                matchCount.textContent = 'No matches';
+            }
+            if (subtitleList) {
+                subtitleList.innerHTML = '<li class="p-3 text-center text-gray-500 dark:text-gray-400">No matching subtitles found</li>';
+            }
+        }
+    }
+
+    function jumpToSubtitles(video, content) {
+        const params = new URLSearchParams();
+        params.set('movie', video);
+        params.set('q', content);
+        params.set('back', window.location.href);
+        window.location.href = `/subtitles?${params.toString()}`;
+    }
+
+    if (DATA.length) {
+        populateSeasons();
+    }
+</script>
+{% endblock %}

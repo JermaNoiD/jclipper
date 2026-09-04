@@ -61,12 +61,18 @@
                         </div>
                         <div class="flex space-x-2">
                             {% if s3_enabled %}
-                            <div class="bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center space-x-2">
+                            <div class="share-file-btn bg-yellow-500 text-white py-2 px-4 rounded-lg hover:bg-yellow-400 transition-colors flex items-center space-x-2">
                                 <i class="fas fa-share-alt cursor-pointer" onclick="shareFile('{{ full_path | replace('/output/', '') }}', '{{ basename }}')"></i>
+                            </div>
+                            <div class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-400 transition-colors flex items-center space-x-2">
+                                <i class="fas fa-link cursor-pointer" onclick="copyLinkFile('{{ full_path | replace('/output/', '') }}')"></i>
                             </div>
                             {% else %}
                             <div class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" title="Sharing is disabled because S3 is not configured">
                                 <i class="fas fa-share-alt"></i>
+                            </div>
+                            <div class="bg-gray-300 text-white py-2 px-4 rounded-lg cursor-not-allowed dark:bg-gray-600 pointer-events-none flex items-center space-x-2" title="Copy Link is disabled because S3 is not configured">
+                                <i class="fas fa-link"></i>
                             </div>
                             {% endif %}
                             <div class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-400 transition-colors flex items-center space-x-2">
@@ -145,6 +151,37 @@
         }
     }
 
+    // Upload the clip to S3 and resolve with the public URL.
+    function getS3Url(filePath) {
+        return fetch('/upload_s3?file=' + encodeURIComponent(filePath))
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'S3 upload failed');
+                return data.url;
+            });
+    }
+
+    function copyToClipboard(url) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Video link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy the link manually:', url);
+            });
+        } else {
+            prompt('Copy the link manually:', url);
+        }
+    }
+
+    // Copy the public S3 link to the clipboard.
+    function copyLinkFile(filePath) {
+        getS3Url(filePath)
+            .then(url => copyToClipboard(url))
+            .catch(err => {
+                alert('S3 upload failed: ' + (err.message || 'Unknown error'));
+            });
+    }
+
     function shareFile(filePath, basename) {
     const parts = basename.split('_');
     let movieName = '';
@@ -155,44 +192,51 @@
         movieName += (i > 0 ? ' ' : '') + parts[i].replace(/_/g, ' ');
     }
     movieName = movieName || 'Video Clip';
-    const text = "Check out this video clip from Jclipper!";
-    {% if s3_enabled %}
-    fetch('/upload_s3?file=' + encodeURIComponent(filePath))
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
+    const serveUrl = '/serve?file=' + encodeURIComponent(filePath);
+
+    function shareLink() {
+        getS3Url(filePath)
+            .then(url => {
                 if (navigator.share) {
-                    navigator.share({
-                        title: movieName,
-                        text: text,
-                        url: data.url
-                    }).then(() => {
-                        console.log('Shared successfully');
-                    }).catch(err => {
-                        console.error('Share failed:', err);
-                        navigator.clipboard.writeText(data.url).then(() => {
-                            alert('Share not supported. Video link copied to clipboard!');
-                        }).catch(err => {
-                            console.error('Failed to copy:', err);
-                            alert('Share not supported and failed to copy video link.');
-                        });
+                    navigator.share({ title: movieName, url: url }).catch(() => copyToClipboard(url));
+                } else {
+                    copyToClipboard(url);
+                }
+            })
+            .catch(err => {
+                console.error('S3 upload error:', err);
+                alert('S3 upload failed: ' + (err.message || 'Unknown error'));
+            });
+    }
+
+    function shareViaFile() {
+        fetch(serveUrl)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch video');
+                return response.blob();
+            })
+            .then(blob => {
+                const file = new File([blob], basename, { type: blob.type || 'video/mp4' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    navigator.share({ files: [file], title: movieName }).catch(err => {
+                        console.log('Share cancelled or failed:', err);
                     });
                 } else {
-                    navigator.clipboard.writeText(data.url).then(() => {
-                        alert('Share not supported. Video link copied to clipboard!');
-                    }).catch(err => {
-                        console.error('Failed to copy:', err);
-                        alert('Share not supported and failed to copy video link.');
-                    });
+                    shareLink();
                 }
-            } else {
-                alert('S3 upload failed: ' + data.message);
-            }
-        })
-        .catch(error => {
-            console.error('S3 upload error:', error);
-            alert('S3 upload failed.');
-        });
+            })
+            .catch(err => {
+                console.error('File share failed, falling back to link:', err);
+                shareLink();
+            });
+    }
+
+    {% if s3_enabled %}
+    if (navigator.canShare) {
+        shareViaFile();
+    } else {
+        shareLink();
+    }
     {% else %}
     alert('Sharing is not available because S3 is not configured.');
     {% endif %}

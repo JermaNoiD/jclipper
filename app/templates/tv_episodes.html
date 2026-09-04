@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Jclipper - {{ show.name }} {{ season.name }}{% endblock %}
+{% block content %}
+<nav class="bg-gray-100 py-4 dark:bg-gray-900 transition-colors">
+    <div class="container mx-auto px-4">
+        <div class="flex justify-center">
+            <input type="text" id="searchInput" class="w-full max-w-2xl bg-white text-gray-900 text-center italic text-lg rounded-lg py-3 px-4 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:focus:ring-gray-500 placeholder-gray-500 dark:placeholder-gray-400" placeholder="Search episodes..." onkeyup="filterEpisodes()">
+        </div>
+    </div>
+</nav>
+<div class="container mx-auto mt-8 px-4 flex-grow">
+    <div class="bg-white rounded-lg border border-gray-300 p-4 max-w-3xl mx-auto min-h-[200px] max-h-[60vh] overflow-y-auto no-scrollbar dark:bg-gray-800 dark:border-gray-700 transition-colors">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ show.name }} - {{ season.name }}</h2>
+            <div class="flex items-center gap-4">
+                <a href="{{ url_for('search_subtitles', root=show.root_slug, show=show.name, season=season.name, back=url_for('tv_episodes', root_slug=show.root_slug, show_name=show.name, season_name=season.name)) }}" class="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                    <i class="fas fa-search"></i> Search
+                </a>
+                <a href="{{ url_for('tv_seasons', root_slug=show.root_slug, show_name=show.name) }}" class="text-sm text-gray-600 dark:text-gray-400 hover:underline">Back to seasons</a>
+            </div>
+        </div>
+        {% if season.episodes %}
+        <ul class="space-y-2" id="episodeList">
+            {% for ep in season.episodes %}
+            {% set ep_display = ep.name | splitext | first | clean_movie_name %}
+            <li class="episode-item flex items-center p-3 rounded-md hover:bg-gray-200 transition-colors dark:hover:bg-gray-700 {% if not ep.has_srt %}cursor-not-allowed opacity-50{% endif %}" data-episode-name="{{ ep_display | lower }}">
+                <a href="{% if ep.has_srt %}{{ url_for('subtitles', movie=ep.video, back=url_for('tv_episodes', root_slug=show.root_slug, show_name=show.name, season_name=season.name)) }}{% else %}#{% endif %}" class="text-gray-800 hover:text-gray-600 dark:text-gray-200 dark:hover:text-white flex-grow transition-colors">{{ ep_display }}</a>
+                {% if not ep.has_srt %}<span class="no-srt-text text-red-900 dark:text-red-300 text-sm bg-red-200 dark:bg-red-900 px-2 py-1 rounded transition-colors ml-2">No subtitle file available</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-gray-500 dark:text-gray-400 text-center py-8">
+            No episodes found for this season.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+<script>
+function filterEpisodes() {
+    const input = document.getElementById('searchInput').value.toLowerCase();
+    const items = document.querySelectorAll('.episode-item');
+    items.forEach(item => {
+        const name = item.dataset.episodeName;
+        if (name.includes(input)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

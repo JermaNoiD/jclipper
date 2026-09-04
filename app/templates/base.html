@@ -163,6 +163,24 @@
     {% block content %}{% endblock %}
     {% block scripts %}
     <script src="{{ url_for('static', filename='js/themeToggle.js') }}"></script>
+    <script>
+        // Hide "Share video" buttons on clients without Web Share file support (e.g. desktop PCs)
+        (function() {
+            function canShareFiles() {
+                if (!navigator.canShare) return false;
+                try {
+                    return navigator.canShare({ files: [new File([''], 'test.mp4', { type: 'video/mp4' })] });
+                } catch (e) {
+                    return false;
+                }
+            }
+            if (!canShareFiles()) {
+                document.querySelectorAll('.share-file-btn').forEach(function(el) {
+                    el.style.display = 'none';
+                });
+            }
+        })();
+    </script>
     {% endblock %}
 </body>
 </html>
