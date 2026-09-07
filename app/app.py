@@ -299,11 +299,21 @@ def timedelta_from_str(time_str):
         return timedelta(seconds=0)
 
 def build_ffmpeg_base_cmd(video, start_sec, duration):
-    return ['ffmpeg', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000',
+    return ['ffmpeg', '-y', '-err_detect', 'ignore_err', '-probesize', '100000000', '-analyzeduration', '100000000',
             '-ss', str(start_sec), '-i', video, '-t', str(duration)]
 
+def _count_audio_streams(path):
+    """Return the number of audio streams in a media file, or -1 if it can't be determined."""
+    try:
+        cmd = ['ffprobe', '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', path]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip()
+        return len([line for line in out.splitlines() if line.strip()])
+    except Exception as e:
+        app.logger.warning(f"ffprobe audio-stream count failed for {path}: {e}")
+        return -1
+
 def _clear_job_session():
-    for key in ('output', 'format', 'scale_factor', 'temp_job_dir', 'audio_index', 'encoding_pid', 'crf', 'preset', 'audio_bitrate'):
+    for key in ('output', 'format', 'scale_factor', 'temp_job_dir', 'audio_index', 'encoding_pid', 'crf', 'preset', 'silent'):
         session.pop(key, None)
     session.modified = True
 
@@ -428,6 +438,36 @@ def search_subtitles():
         title += f" - {season_name}"
     return render_template('search_subtitles.html', seasons=season_groups, title=title, show_name=show_name, season_name=season_name, root_slug=root_slug, back_url=back_url)
 
+def find_srt_for_movie(movie):
+    """Return the SRT path for a movie/episode (matched by video path), or None."""
+    srt_path = next((m['srt'] for m in movies if m['video'] == movie), None)
+    if srt_path is None:
+        for show in tv_shows:
+            for season in show['seasons']:
+                ep = next((e for e in season['episodes'] if e['video'] == movie), None)
+                if ep:
+                    srt_path = ep['srt']
+                    break
+            if srt_path is not None:
+                break
+    return srt_path
+
+def shift_srt(src_path, shift_sec, dest_path):
+    """Write a copy of the SRT at dest_path with all timestamps shifted by shift_sec (seconds).
+
+    Used when burning subtitles into a clip: the clip's video starts at 0, so the
+    subtitle times must be re-based relative to the clip's start (shift_sec is negative).
+    """
+    with open(src_path, 'r', encoding='utf-8', errors='ignore') as f:
+        subs = list(srt.parse(f.read()))
+    delta = timedelta(seconds=shift_sec)
+    zero = timedelta(0)
+    for sub in subs:
+        sub.start = max(zero, sub.start + delta)
+        sub.end = max(zero, sub.end + delta)
+    with open(dest_path, 'w', encoding='utf-8') as f:
+        f.write(srt.compose(subs))
+
 @app.route('/subtitles', methods=['GET', 'POST'])
 def subtitles():
     movie = request.args.get('movie')
@@ -441,16 +481,7 @@ def subtitles():
         app.logger.warning("No movie selected, redirecting to index")
         return redirect(url_for('index'))
     app.logger.info(f"Accessing subtitles for movie: {os.path.basename(movie)}")
-    srt_path = next((m['srt'] for m in movies if m['video'] == movie), None)
-    if srt_path is None:
-        for show in tv_shows:
-            for season in show['seasons']:
-                ep = next((e for e in season['episodes'] if e['video'] == movie), None)
-                if ep:
-                    srt_path = ep['srt']
-                    break
-            if srt_path is not None:
-                break
+    srt_path = find_srt_for_movie(movie)
     subs = []
     if srt_path:
         app.logger.info(f"Attempting to open SRT file: {srt_path}")
@@ -532,6 +563,8 @@ def output():
     movie_base = os.path.splitext(os.path.basename(video))[0]
     pretty_movie_name = tv_episode_display_name(video) or clean_movie_name(movie_base)
     app.logger.info(f"Passing pretty_movie_name: {pretty_movie_name} to output.html")
+    srt_path = find_srt_for_movie(video)
+    app.logger.info(f"Subtitle burn-in available: {srt_path is not None} (srt={srt_path})")
     return render_template('output.html',
                           original_res=res,
                           start=start,
@@ -543,18 +576,54 @@ def output():
                           has_multiple_audio=has_multiple_audio,
                           audio_streams=processed_audio_streams,
                           audio_index=audio_index,
-                          pretty_movie_name=pretty_movie_name)
+                          pretty_movie_name=pretty_movie_name,
+                          has_srt=(srt_path is not None),
+                          srt_path=srt_path)
 
-def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf=23, preset='veryfast', audio_bitrate='192k'):
+def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf=23, preset='veryfast', silent=False, burn_subs=False, srt_path=None):
     with app.app_context():
         encoding_file = os.path.join(temp_job_dir, 'encoding')
         log_file = os.path.join(temp_job_dir, 'log.txt')
         success_file = os.path.join(temp_job_dir, 'success')
         scale_filter = f'scale={scaled_width}:{scaled_height}:flags=lanczos' if scale_factor != 1.0 else None
         base_cmd = build_ffmpeg_base_cmd(video, start_sec, duration)
+        # Build the video filter chain: optional scale + optional subtitle burn-in.
+        # Subtitles are only burned into video formats (mp4/gif); audio formats can't
+        # carry them. The SRT is re-based to the clip start (negative shift) because the
+        # clip's output timestamps begin at 0 after the input seek.
+        vf_parts = []
+        if scale_filter:
+            vf_parts.append(scale_filter)
+        if burn_subs and format in ('mp4', 'gif'):
+            if not srt_path:
+                srt_path = find_srt_for_movie(video)
+            if srt_path:
+                try:
+                    shifted_srt = os.path.join(temp_job_dir, 'subs.srt')
+                    shift_srt(srt_path, -start_sec, shifted_srt)
+                    esc = shifted_srt.replace('\\', '\\\\').replace(':', '\\:')
+                    vf_parts.append(f'subtitles=filename={esc}')
+                    app.logger.info(f"Burning subtitles from {srt_path} into clip (times shifted by -{start_sec}s)")
+                except Exception as e:
+                    app.logger.error(f"Failed to prepare subtitles for burn-in, continuing without: {e}")
+            else:
+                app.logger.warning(f"burn_subs requested but no SRT found for {video}")
+        video_filter = ','.join(vf_parts) if vf_parts else None
+        # Clamp the requested audio stream index into the range of streams that
+        # actually exist, so the optional audio map below can never silently drop
+        # the audio track (which used to produce no-audio clips).
+        num_audio = _count_audio_streams(video)
+        try:
+            requested_index = int(audio_index)
+        except (TypeError, ValueError):
+            requested_index = 0
+        if num_audio > 0:
+            audio_index = str(min(max(requested_index, 0), num_audio - 1))
+        elif requested_index != 0:
+            audio_index = '0'
         if format == 'mp3':
             main_cmd = base_cmd + [
-                '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', audio_bitrate, '-ac', '2',
+                '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:a', 'libmp3lame', '-b:a', '192k', '-ac', '2',
                 '-threads', '4', output_file
             ]
         elif format == 'wav':
@@ -568,18 +637,30 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
             main_cmd = base_cmd + [
                 '-map', '0:v:0?', '-map', '-0:a?', '-map', '-0:s?', '-c:v', video_codec
             ]
-            if scale_filter:
-                main_cmd += ['-vf', scale_filter]
+            if video_filter:
+                main_cmd += ['-vf', video_filter]
             main_cmd += extra_flags + [output_file]
+        elif silent:
+            # Silent MP4: video only, no audio stream.
+            video_codec = 'libx264'
+            main_cmd = base_cmd + [
+                '-map', '0:v:0?', '-map', '-0:s?', '-c:v', video_codec, '-crf', str(crf), '-preset', preset, '-an',
+                '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p'
+            ]
+            if video_filter:
+                main_cmd += ['-vf', video_filter]
+            if format == 'mp4':
+                main_cmd += ['-movflags', '+faststart']
+            main_cmd += [output_file]
         else:
             video_codec = 'libx264'
             audio_codec = 'aac'
             main_cmd = base_cmd + [
-                '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-crf', str(crf), '-preset', preset, '-c:a', audio_codec, '-b:a', audio_bitrate, '-ac', '2',
+                '-map', '0:v:0?', '-map', f'0:a:{audio_index}?', '-map', '-0:s?', '-c:v', video_codec, '-crf', str(crf), '-preset', preset, '-c:a', audio_codec, '-b:a', '192k', '-ac', '2',
                 '-threads', '4', '-r', '23.98', '-pix_fmt', 'yuv420p'
             ]
-            if scale_filter:
-                main_cmd += ['-vf', scale_filter]
+            if video_filter:
+                main_cmd += ['-vf', video_filter]
             if format == 'mp4':
                 main_cmd += ['-movflags', '+faststart']
             main_cmd += [output_file]
@@ -615,6 +696,16 @@ def encode_main(output_file, start_sec, duration, scaled_width, scaled_height, f
                 if FFMPEG_LOG_ENABLED:
                     app.logger.error(f"Failed to probe output file resolution: {e.output}")
                 ffmpeg_output += "\nOutput resolution: Failed to probe"
+        # Verify the encoded video actually contains an audio stream (unless it was
+        # intentionally rendered silent). A missing audio track is the symptom of the
+        # "clip has no audio" bug, so surface it loudly in the log.
+        if format == 'mp4' and not silent and process.returncode == 0 and os.path.exists(output_file):
+            out_audio = _count_audio_streams(output_file)
+            if out_audio == 0:
+                app.logger.warning(f"Encoded MP4 has NO audio stream: {output_file} (source={video}, audio_index={audio_index})")
+                ffmpeg_output += "\nWARNING: output MP4 contains no audio stream"
+            elif FFMPEG_LOG_ENABLED:
+                app.logger.info(f"Output MP4 audio stream count: {out_audio}")
         with open(log_file, 'w') as f:
             f.write(ffmpeg_output)
         if process.returncode == 0 and os.path.exists(output_file) and os.path.getsize(output_file) > 0:
@@ -644,11 +735,12 @@ def generate():
     audio_index = request.form.get('audio_index', '0')
     crf = int(request.form.get('crf', 23))
     preset = request.form.get('preset', 'veryfast')
-    audio_bitrate = request.form.get('audio_bitrate', '192k')
+    silent = request.form.get('silent') in ('1', 'on', 'true', 'True', 'yes')
+    burn_subs = request.form.get('burn_subs') in ('1', 'on', 'true', 'True', 'yes')
     # Remove direct resolution parsing from form; calculate from scale_factor
     # res_str = request.form.get('resolution', '1920x1080')
     # scaled_width, scaled_height = map(int, res_str.split('x'))
-    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, scale_factor={scale_factor}, audio_index={audio_index}, crf={crf}, preset={preset}, audio_bitrate={audio_bitrate}")
+    app.logger.info(f"Generate request: start={start_str}, end={end_str}, video={video}, format={format}, scale_factor={scale_factor}, audio_index={audio_index}, crf={crf}, preset={preset}, silent={silent}, burn_subs={burn_subs}")
     if not all([start_str, end_str, video]):
         app.logger.warning(f"Missing required params in generate: start={start_str}, end={end_str}, video={video}")
         return jsonify({'error': 'Missing required parameters'}), 400
@@ -709,7 +801,8 @@ def generate():
     session['audio_index'] = audio_index
     session['crf'] = crf
     session['preset'] = preset
-    session['audio_bitrate'] = audio_bitrate
+    session['silent'] = silent
+    session['burn_subs'] = burn_subs
     session.modified = True
     app.logger.info(f"Preserved session in generate: {session}")
 
@@ -719,7 +812,7 @@ def generate():
     open(os.path.join(temp_job_dir, 'encoding'), 'w').close()
 
     # Start main encode in background; output page polls /status until complete
-    threading.Thread(target=copy_current_request_context(encode_main), args=(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf, preset, audio_bitrate), daemon=True).start()
+    threading.Thread(target=copy_current_request_context(encode_main), args=(output_file, start_sec, duration, scaled_width, scaled_height, format, video, original_width, original_height, scale_factor, temp_job_dir, audio_index, crf, preset, silent, burn_subs), daemon=True).start()
     return jsonify({'status': 'encoding'})
 
 @app.route('/preview', methods=['GET'])
