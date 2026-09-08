@@ -5,3 +5,4 @@ docker-compose.yml
 @eaDir
 *.pyc
 __pycache__/
+AGENTS.md
